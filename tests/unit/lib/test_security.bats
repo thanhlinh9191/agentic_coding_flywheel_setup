@@ -87,6 +87,28 @@ teardown() {
     assert_output --partial "Checksum mismatch"
 }
 
+@test "verify_checksum: rejects trusted-owner mismatch without refreshed checksum" {
+    local security_lib="$PROJECT_ROOT/scripts/lib/security.sh"
+
+    run bash -c '
+        source "$1"
+        acfs_download_to_file() {
+            printf "%s" "changed trusted content" > "$2"
+        }
+        acfs_refresh_loaded_checksums_from_remote() {
+            return 1
+        }
+        verify_checksum \
+            "https://raw.githubusercontent.com/Dicklesworthstone/example/main/install.sh" \
+            "0000000000000000000000000000000000000000000000000000000000000000" \
+            "trusted_tool"
+    ' _ "$security_lib"
+
+    assert_failure
+    assert_output --partial "Checksum mismatch"
+    refute_output --partial "Trusted-tool auto-accept"
+}
+
 @test "load_checksums: parses yaml" {
     # Need full 64-char sha256 for regex
     local sha1="1111111111111111111111111111111111111111111111111111111111111111"
