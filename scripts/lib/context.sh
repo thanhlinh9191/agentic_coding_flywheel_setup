@@ -61,6 +61,11 @@ _json_escape() {
     printf '%s' "$s"
 }
 
+_context_remove_temp_file() {
+    local path="${1:-}"
+    [[ -n "$path" ]] && rm -f -- "$path" 2>/dev/null || true
+}
+
 # ============================================================
 # Phase Management Functions
 # ============================================================
@@ -142,7 +147,6 @@ try_step() {
     # Execute command, capturing both stdout and stderr when possible.
     local exit_code=0
     if [[ -n "$temp_output" ]]; then
-        trap 'rm -f "${temp_output:-}" 2>/dev/null || true; trap - RETURN' RETURN
         if "$@" > "$temp_output" 2>&1; then
             exit_code=0
         else
@@ -161,6 +165,7 @@ try_step() {
         _handle_step_failure "$description" "$exit_code" "$temp_output"
     fi
 
+    _context_remove_temp_file "$temp_output"
     return $exit_code
 }
 
@@ -195,7 +200,6 @@ try_step_eval() {
     # Use `-e` so `cmd1; cmd2` doesn't accidentally mask failures.
     local exit_code=0
     if [[ -n "$temp_output" ]]; then
-        trap 'rm -f "${temp_output:-}" 2>/dev/null || true; trap - RETURN' RETURN
         if bash -e -o pipefail -c "$command_str" > "$temp_output" 2>&1; then
             exit_code=0
         else
@@ -214,6 +218,7 @@ try_step_eval() {
         _handle_step_failure "$description" "$exit_code" "$temp_output"
     fi
 
+    _context_remove_temp_file "$temp_output"
     return $exit_code
 }
 
