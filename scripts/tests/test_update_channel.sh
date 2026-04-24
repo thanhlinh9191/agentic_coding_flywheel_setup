@@ -90,25 +90,28 @@ fi
 # ============================================================
 section "Test 2b: update_target_home resolves passwd homes"
 # ============================================================
+home_resolution_dir="${TMPDIR:-/tmp}/acfs-home-resolution.$$"
+mkdir -p "$home_resolution_dir"
 home_resolution_output=$(
+    HOME_RESOLUTION_DIR="$home_resolution_dir" \
     bash -c '
         source "'"$UPDATE_SH"'"
         TARGET_HOME=""
         HOME="/tmp/not-the-target-home"
 
-        getent() {
-            if [[ "$1" == "passwd" && "$2" == "dummy" ]]; then
-                printf "dummy:x:1000:1000::/srv/dummy:/bin/bash\n"
+        update_getent_passwd_entry() {
+            if [[ "$1" == "dummy" ]]; then
+                printf "dummy:x:1000:1000::%s:/bin/bash\n" "$HOME_RESOLUTION_DIR"
                 return 0
             fi
-            command getent "$@"
+            return 1
         }
 
         update_target_home dummy
     ' 2>&1
 ) || true
 
-if [[ "$home_resolution_output" == "/srv/dummy" ]]; then
+if [[ "$home_resolution_output" == "$home_resolution_dir" ]]; then
     pass "update_target_home prefers passwd-resolved homes over /home fallback"
 else
     fail "update_target_home did not use passwd-resolved home: $home_resolution_output"
@@ -157,14 +160,15 @@ section "Test 3b: Gemini dry-run skips nvm warnings cleanly"
 # ============================================================
 gemini_dry_run_output=$(
     bash -c '
-        source "'"$UPDATE_SH"'"
-
         temp_home="${TMPDIR:-/tmp}/acfs-gemini-dry-run.$$"
         mkdir -p "$temp_home/.bun/bin"
         printf "#!/usr/bin/env bash\nexit 0\n" > "$temp_home/.bun/bin/bun"
         chmod +x "$temp_home/.bun/bin/bun"
 
         HOME="$temp_home"
+        TARGET_HOME="$temp_home"
+        source "'"$UPDATE_SH"'"
+
         DRY_RUN=true
         VERBOSE=false
         QUIET=true
@@ -182,8 +186,8 @@ gemini_dry_run_output=$(
         declare -gA VERSION_BEFORE=()
         declare -gA VERSION_AFTER=()
 
-        log_item() { printf "%s|%s|%s\n" "$1" "$2" "$3"; }
-        cmd_exists() { [[ "$1" == "gemini" ]]; }
+        log_item() { printf "%s|%s|%s\n" "$1" "$2" "${3:-}"; }
+        update_binary_exists() { [[ "$1" == "gemini" ]]; }
         capture_version_before() { return 0; }
         capture_version_after() { return 1; }
         run_cmd_bun_with_retry() { log_item "skip" "$1" "dry-run"; return 0; }
@@ -277,20 +281,21 @@ section "Test 3e: legacy cleanup stays non-destructive in dry-run"
 # ============================================================
 dry_run_cleanup_output=$(
     bash -c '
-        source "'"$UPDATE_SH"'"
-
         temp_home="${TMPDIR:-/tmp}/acfs-update-dry-run-cleanup.$$"
         mkdir -p "$temp_home/.claude/hooks"
         printf "legacy\n" > "$temp_home/.claude/hooks/git_safety_guard.sh"
 
         HOME="$temp_home"
+        TARGET_HOME="$temp_home"
+        source "'"$UPDATE_SH"'"
+
         DRY_RUN=true
         QUIET=true
         UPDATE_LOG_FILE="/dev/null"
         NO_COLOR=1
         RED="" GREEN="" YELLOW="" CYAN="" BOLD="" DIM="" NC=""
 
-        log_item() { printf "%s|%s|%s\n" "$1" "$2" "$3"; }
+        log_item() { printf "%s|%s|%s\n" "$1" "$2" "${3:-}"; }
 
         cleanup_legacy_git_safety_guard
 
@@ -501,6 +506,19 @@ for ms_arm64_arch in aarch64 arm64; do
             cargo() {
                 echo "$*" > "'"$MS_ARM64_SIGNAL"'"
                 return 0
+            }
+
+            update_binary_path() {
+                if [[ "$1" == "cargo" ]]; then
+                    printf "cargo\n"
+                    return 0
+                fi
+                return 1
+            }
+
+            update_run_in_target_context() {
+                shift
+                "$@"
             }
 
             update_run_verified_installer ms --easy-mode
