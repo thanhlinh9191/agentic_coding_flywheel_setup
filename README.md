@@ -38,12 +38,12 @@ The installer is **idempotent**—if interrupted, simply re-run it. It will auto
 > **Production environments:** For stable, reproducible installs, pin to a tagged release or specific commit:
 > ```bash
 > # Preferred: use a tagged release (e.g., v0.5.0)
-> ACFS_REF=v0.5.0 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.5.0/install.sh" | bash -s -- --yes --mode vibe
+> curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.5.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.5.0
 >
 > # Alternative: pin to a specific commit SHA
-> ACFS_REF=abc1234 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh" | bash -s -- --yes --mode vibe
+> curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh" | bash -s -- --yes --mode vibe --ref abc1234
 > ```
-> Tagged releases are tested and stable. Setting `ACFS_REF` ensures all fetched scripts use the same version.
+> Tagged releases are tested and stable. Passing `--ref` ensures all fetched scripts use the same version.
 
 ---
 
@@ -4330,19 +4330,19 @@ ACFS supports various configuration mechanisms for advanced users.
 **Examples:**
 ```bash
 # Install from a tagged release (recommended for production)
-ACFS_REF=v0.1.0 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.1.0/install.sh" | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.1.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.1.0
 
 # Install from a specific branch (development/testing)
-ACFS_REF=feature/new-tool curl -fsSL "..." | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/feature/new-tool/install.sh" | bash -s -- --yes --mode vibe --ref feature/new-tool
 
 # Install from a specific commit (reproducibility)
-ACFS_REF=abc1234 curl -fsSL "..." | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh" | bash -s -- --yes --mode vibe --ref abc1234
 
 # Pin installer version but use latest checksums (avoid stale hash mismatches)
-ACFS_REF=v0.5.0 ACFS_CHECKSUMS_REF=main curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.5.0/install.sh" | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.5.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.5.0 --checksums-ref main
 ```
 
-> **Tip:** Always match the URL path with `ACFS_REF` so the initial script and all subsequently fetched scripts come from the same ref.
+> **Tip:** Always match the URL path with `--ref` so the initial script and all subsequently fetched scripts come from the same ref. If you use environment variables in a pipeline, attach them to `bash`, not `curl`: `curl ... | ACFS_REF=v0.5.0 bash -s -- --yes --mode vibe`.
 > **Tip:** For pinned installs (tags/SHAs), checksums default to `main` to avoid stale installer hashes. Override with `ACFS_CHECKSUMS_REF` if you want checksums pinned to the same ref.
 
 ### Complete Installer CLI Options
@@ -4357,6 +4357,7 @@ The installer supports extensive command-line customization:
 --mode vibe|safe       # Installation mode (default: vibe)
 --interactive          # Force interactive mode with prompts
 --strict               # Abort on any error (vs. continue with warnings)
+--ref <ref>            # Git ref to install from (branch, tag, or commit SHA)
 --checksums-ref <ref>  # Fetch checksums.yaml from this ref (default: main for pinned tags/SHAs)
 ```
 

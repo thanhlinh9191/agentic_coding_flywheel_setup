@@ -10,14 +10,14 @@ For production environments or when you need consistent installs across multiple
 
 ## How Pinning Works
 
-Set the `ACFS_REF` environment variable before running the installer:
+Pass `--ref` to the installer and use the same ref in the raw GitHub URL:
 
 ```bash
 # Pin to a tagged release (recommended for production)
-ACFS_REF=v0.6.0 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.6.0/install.sh" | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.6.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.6.0
 
 # Pin to a specific commit SHA (maximum reproducibility)
-ACFS_REF=abc1234 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh" | bash -s -- --yes --mode vibe
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh" | bash -s -- --yes --mode vibe --ref abc1234
 ```
 
 ## When to Use Pinning
@@ -51,18 +51,21 @@ The [ACFS Wizard](https://agent-flywheel.com/wizard/run-installer) includes a "P
 
 1. Enable the toggle
 2. Enter a tag (e.g., `v0.6.0`) or commit SHA
-3. The generated command includes `ACFS_REF` automatically
+3. The generated command pins the installer ref automatically
 
 ## Installer Flags
 
 When using pinned refs, you can also use:
 
 ```bash
-# Use --pin-ref flag instead of ACFS_REF environment variable
-curl -fsSL ".../install.sh" | bash -s -- --yes --mode vibe --pin-ref v0.6.0
+# Use --ref instead of relying on shell environment-variable placement
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.6.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.6.0
+
+# Resolve a branch or tag to a copy-pasteable pinned SHA command
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/install.sh" | bash -s -- --pin-ref --ref main
 
 # Fetch checksums from a different ref (advanced)
-ACFS_CHECKSUMS_REF=main ACFS_REF=v0.6.0 curl ... | bash ...
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.6.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.6.0 --checksums-ref main
 ```
 
 ## Finding Version Tags
@@ -94,13 +97,13 @@ To update a pinned installation:
 
 ```bash
 # Option 1: Re-run with new pin
-ACFS_REF=v0.7.0 curl ... | bash ...
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.7.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.7.0
 
 # Option 2: Use acfs update (updates to main)
 acfs update
 
-# Option 3: Uninstall and reinstall
-rm -rf ~/.acfs && ACFS_REF=v0.7.0 curl ... | bash ...
+# Option 3: Force ACFS to reinstall managed tools from the pinned ref
+curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/v0.7.0/install.sh" | bash -s -- --yes --mode vibe --ref v0.7.0 --force-reinstall
 ```
 
 ## Best Practices

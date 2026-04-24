@@ -472,9 +472,9 @@ When adding or modifying modulesâ€”especially ones that run upstream installersâ
    - Validate the archive bootstrap on the exact ref you intend to ship:
      ```bash
      # Run against a tag/sha or branch ref
-     ACFS_REF=<ref> curl -fsSL \
+     curl -fsSL \
        "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/<ref>/install.sh" \
-       | bash -s -- --print-plan
+       | bash -s -- --print-plan --ref <ref>
      ```
    - The bootstrap flow validates script syntax and ensures `scripts/generated/manifest_index.sh`
      matches `acfs.manifest.yaml`. If this fails, the ref is inconsistent.
