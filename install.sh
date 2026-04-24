@@ -3810,7 +3810,6 @@ run_ubuntu_upgrade_phase() {
         had_state_file=true
     fi
     export ACFS_STATE_FILE="$upgrade_state_file"
-    trap 'restore_previous_acfs_state_file "${had_state_file:-false}" "${previous_state_file:-}"; trap - RETURN' RETURN
 
     # Convert target version string to number for comparison
     # TARGET_UBUNTU_VERSION is "25.10", need 2510

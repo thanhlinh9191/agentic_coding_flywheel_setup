@@ -315,6 +315,17 @@ EOF
     assert_output --partial "--checksums-ref requires a ref"
 }
 
+@test "install.sh: Ubuntu upgrade state override does not use RETURN trap" {
+    local installer="$PROJECT_ROOT/install.sh"
+
+    run bash -c 'sed -n "/^run_ubuntu_upgrade_phase()/,/^restore_previous_acfs_state_file()/p" "$1" | grep -F "trap "' _ "$installer"
+    assert_failure
+
+    run bash -c 'sed -n "/^run_ubuntu_upgrade_phase()/,/^restore_previous_acfs_state_file()/p" "$1" | grep -F "restore_previous_acfs_state_file \"\$had_state_file\" \"\$previous_state_file\"" | wc -l' _ "$installer"
+    assert_success
+    [[ "$output" -ge 10 ]] || fail "expected explicit ACFS_STATE_FILE restores in Ubuntu upgrade exits"
+}
+
 @test "update_has_nvm_node: requires executable node binary" {
     local node_bin="$HOME/.nvm/versions/node/v99.0.0/bin"
 
