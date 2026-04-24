@@ -998,6 +998,8 @@ generate_resume_hint() {
     local install_url=""
     local install_url_q=""
     local arg_q=""
+    local resume_ref=""
+    local resume_ref_pinned_from_commit=false
     local -a resume_args=(--resume)
 
     # Prefer curl|bash one-liner for curl invocations; local script for local runs
@@ -1032,14 +1034,23 @@ generate_resume_hint() {
 
     # Propagate --ref so the resume uses the same git ref (avoids the
     # curl|bash env-var pitfall where ACFS_REF only reaches curl, not bash)
-    if [[ -n "${ACFS_REF_INPUT:-}" && "${ACFS_REF_INPUT}" != "main" ]]; then
-        resume_args+=(--ref "$ACFS_REF_INPUT")
+    if [[ -z "${SCRIPT_DIR:-}" && -n "${ACFS_COMMIT_SHA_FULL:-}" ]]; then
+        resume_ref="$ACFS_COMMIT_SHA_FULL"
+        resume_ref_pinned_from_commit=true
+    elif [[ -n "${ACFS_REF_INPUT:-}" && "${ACFS_REF_INPUT}" != "main" ]]; then
+        resume_ref="$ACFS_REF_INPUT"
+    fi
+    if [[ -n "$resume_ref" ]]; then
+        resume_args+=(--ref "$resume_ref")
     fi
 
-    # Preserve an explicit checksum metadata ref across resume commands. The
-    # default checksum ref is derived from --ref, so only include this when it
-    # was deliberately pinned by CLI or environment.
+    # Preserve checksum metadata that would otherwise be lost when replaying
+    # the resume command with a different --ref than the original invocation.
     if [[ "${ACFS_CHECKSUMS_REF_EXPLICIT:-false}" == "true" && -n "${ACFS_CHECKSUMS_REF:-}" ]]; then
+        resume_args+=(--checksums-ref "$ACFS_CHECKSUMS_REF")
+    elif [[ "$resume_ref_pinned_from_commit" == "true" && -n "${ACFS_CHECKSUMS_REF:-}" && "$ACFS_CHECKSUMS_REF" != "main" ]]; then
+        # Pinning --ref to an exact SHA would otherwise make parse_args derive
+        # checksum metadata from main, not the symbolic branch used originally.
         resume_args+=(--checksums-ref "$ACFS_CHECKSUMS_REF")
     fi
 

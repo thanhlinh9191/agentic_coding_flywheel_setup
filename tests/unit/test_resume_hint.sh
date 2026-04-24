@@ -230,6 +230,51 @@ test_pinned_commit_sha() {
         log "  Expected commit SHA in output, got: $result"
         return 1
     fi
+    if [[ "$result" != *"--ref $ACFS_COMMIT_SHA_FULL"* ]]; then
+        log "  Expected --ref to pin the same commit SHA, got: $result"
+        return 1
+    fi
+
+    return 0
+}
+
+test_pinned_commit_sha_takes_precedence_over_symbolic_ref() {
+    setup_test_env
+    ACFS_REF_INPUT="feature-branch"
+    ACFS_COMMIT_SHA_FULL="abc123def456abc123def456abc123def456abc1"
+
+    local result
+    result=$(generate_resume_hint "" "")
+
+    if [[ "$result" != *"--ref $ACFS_COMMIT_SHA_FULL"* ]]; then
+        log "  Expected --ref to use exact commit SHA, got: $result"
+        return 1
+    fi
+    if [[ "$result" == *"--ref feature-branch"* ]]; then
+        log "  Expected resume hint not to re-resolve symbolic ref, got: $result"
+        return 1
+    fi
+
+    return 0
+}
+
+test_pinned_commit_sha_preserves_symbolic_checksum_ref() {
+    setup_test_env
+    ACFS_REF_INPUT="feature-branch"
+    ACFS_CHECKSUMS_REF="feature-branch"
+    ACFS_COMMIT_SHA_FULL="abc123def456abc123def456abc123def456abc1"
+
+    local result
+    result=$(generate_resume_hint "" "")
+
+    if [[ "$result" != *"--ref $ACFS_COMMIT_SHA_FULL"* ]]; then
+        log "  Expected --ref to use exact commit SHA, got: $result"
+        return 1
+    fi
+    if [[ "$result" != *"--checksums-ref feature-branch"* ]]; then
+        log "  Expected resume hint to preserve branch checksum metadata, got: $result"
+        return 1
+    fi
 
     return 0
 }
@@ -619,6 +664,8 @@ main() {
     run_test test_local_script_invocation
     run_test test_local_script_invocation_with_spaces
     run_test test_pinned_commit_sha
+    run_test test_pinned_commit_sha_takes_precedence_over_symbolic_ref
+    run_test test_pinned_commit_sha_preserves_symbolic_checksum_ref
     run_test test_custom_ref
     run_test test_custom_ref_shell_escaped
     run_test test_checksums_ref_survives_ref_parse_order
