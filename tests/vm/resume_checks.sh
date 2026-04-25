@@ -196,6 +196,33 @@ test_interrupt_phase() {
   assert_true "phase marked complete after rerun" state_is_phase_completed "cli_tools"
 }
 
+test_state_lock_tracks_current_state_file() {
+  local first_state second_state first_fd first_lock second_fd second_lock
+  first_state="$(new_state_file lock-first)"
+  second_state="$(new_state_file lock-second)"
+
+  export ACFS_STATE_FILE="$first_state"
+  _state_acquire_lock || {
+    fail "state lock acquired for first state file"
+    return
+  }
+  first_fd="$ACFS_LOCK_FD"
+  first_lock="$(readlink "/proc/$$/fd/$first_fd" 2>/dev/null || true)"
+  _state_release_lock
+
+  export ACFS_STATE_FILE="$second_state"
+  _state_acquire_lock || {
+    fail "state lock acquired for second state file"
+    return
+  }
+  second_fd="$ACFS_LOCK_FD"
+  second_lock="$(readlink "/proc/$$/fd/$second_fd" 2>/dev/null || true)"
+  _state_release_lock
+
+  assert_eq "${first_state}.lock" "$first_lock" "first state lock targets first state file"
+  assert_eq "${second_state}.lock" "$second_lock" "state lock retargets after ACFS_STATE_FILE changes"
+}
+
 test_version_mismatch() {
   local state_file
   state_file="$(new_state_file version)"
@@ -225,6 +252,7 @@ main() {
   test_force_resume_without_completed_phases
   test_force_reinstall_without_completed_phases
   test_interrupt_phase
+  test_state_lock_tracks_current_state_file
   test_version_mismatch
 
   echo ""

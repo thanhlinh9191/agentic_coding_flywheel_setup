@@ -698,16 +698,17 @@ state_write_atomic() {
 # Usage: _state_acquire_lock
 # Returns: 0 on success, 1 on timeout/failure
 _state_acquire_lock() {
-    # If already locked by this process, track nested callers so an inner
-    # state_save cannot release the outer caller's lock early.
-    if [[ "${_ACFS_STATE_LOCKED:-}" == "true" ]]; then
-        _ACFS_STATE_LOCK_DEPTH=$(( ${_ACFS_STATE_LOCK_DEPTH:-1} + 1 ))
-        return 0
-    fi
-
     local state_file
     state_file="$(state_get_file)" || return 1
     local lock_file="${state_file}.lock"
+
+    # If already locked by this process, track nested callers so an inner
+    # state_save cannot release the outer caller's lock early.
+    if [[ "${_ACFS_STATE_LOCKED:-}" == "true" ]]; then
+        [[ "${_ACFS_STATE_LOCK_FILE:-}" == "$lock_file" ]] || return 1
+        _ACFS_STATE_LOCK_DEPTH=$(( ${_ACFS_STATE_LOCK_DEPTH:-1} + 1 ))
+        return 0
+    fi
 
     # Ensure parent directory exists
     if ! mkdir -p "$(dirname "$state_file")" 2>/dev/null; then
@@ -731,6 +732,10 @@ _state_acquire_lock() {
         fi
     fi
 
+    if [[ -n "${ACFS_LOCK_FD:-}" && "${_ACFS_STATE_LOCK_FILE:-}" != "$lock_file" ]]; then
+        _state_close_lock_fd
+    fi
+
     local lock_timeout="${ACFS_STATE_LOCK_TIMEOUT:-30}"
     if [[ ! "$lock_timeout" =~ ^[0-9]+$ ]] || [[ "$lock_timeout" -lt 1 ]]; then
         lock_timeout=30
@@ -739,12 +744,27 @@ _state_acquire_lock() {
     # State writes can briefly queue behind durable atomic writes. Wait long
     # enough to preserve resume metadata instead of dropping contended updates.
     if ! flock -w "$lock_timeout" "${ACFS_LOCK_FD}" 2>/dev/null; then
+        _state_close_lock_fd
         return 1
     fi
 
     _ACFS_STATE_LOCKED=true
     _ACFS_STATE_LOCK_DEPTH=1
+    _ACFS_STATE_LOCK_FILE="$lock_file"
     return 0
+}
+
+_state_close_lock_fd() {
+    case "${ACFS_LOCK_FD:-}" in
+        199)
+            exec 199>&- 2>/dev/null || true
+            ;;
+        200)
+            exec 200>&- 2>/dev/null || true
+            ;;
+    esac
+    unset ACFS_LOCK_FD
+    _ACFS_STATE_LOCK_FILE=""
 }
 
 # Release the lock
@@ -759,6 +779,7 @@ _state_release_lock() {
     if [[ -n "${ACFS_LOCK_FD:-}" ]]; then
         flock -u "${ACFS_LOCK_FD}" 2>/dev/null || true
     fi
+    _state_close_lock_fd
     _ACFS_STATE_LOCKED=false
     _ACFS_STATE_LOCK_DEPTH=0
 }
