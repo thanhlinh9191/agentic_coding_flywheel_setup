@@ -356,6 +356,47 @@ test_manifest_matches_bundle_inventory() {
     cleanup_mock_env
 }
 
+test_log_collection_skips_symlinked_logs() {
+    setup_mock_env
+    local output_dir="$MOCK_HOME/test-output"
+    mkdir -p "$output_dir"
+
+    cat > "$MOCK_HOME/outside-secret.log" <<'LOG'
+SYMLINK_SHOULD_NOT_LEAK=super-secret-diagnostic-value
+LOG
+    ln -s "$MOCK_HOME/outside-secret.log" "$MOCK_ACFS/logs/install-20260126_230000.log"
+
+    local archive_path
+    archive_path=$(HOME="$MOCK_HOME" ACFS_HOME="$MOCK_ACFS" SUPPORT_BUNDLE_DOCTOR_TIMEOUT=5 \
+        bash "$SUPPORT_SH" --output "$output_dir" 2>/dev/null) || true
+
+    if [[ -z "$archive_path" ]]; then
+        harness_fail "Bundle archive exists for symlink log check"
+        cleanup_mock_env
+        return
+    fi
+
+    local bundle_dir="$archive_path"
+    if [[ "$bundle_dir" == *.tar.gz ]]; then
+        bundle_dir="${bundle_dir%.tar.gz}"
+    fi
+
+    if [[ ! -d "$bundle_dir" ]]; then
+        harness_fail "Bundle directory exists for symlink log check" "Got: $bundle_dir"
+        cleanup_mock_env
+        return
+    fi
+
+    if [[ ! -e "$bundle_dir/logs/install-20260126_230000.log" ]] \
+        && ! grep -R "SYMLINK_SHOULD_NOT_LEAK" "$bundle_dir" >/dev/null 2>&1; then
+        harness_pass "Support bundle skips symlinked install logs"
+    else
+        harness_fail "Support bundle skips symlinked install logs" "Symlink target content was copied"
+    fi
+
+    cleanup_mock_env
+}
+
 test_redaction_catches_secrets() {
     setup_mock_env
     local output_dir="$MOCK_HOME/test-output"
@@ -647,6 +688,7 @@ main() {
     test_bundle_contains_expected_files || true
     test_sudo_user_defaults_to_target_acfs_home || true
     test_bundle_names_stay_unique_when_timestamps_collide || true
+    test_log_collection_skips_symlinked_logs || true
     test_tar_failure_returns_bundle_dir || true
 
     harness_section "Manifest JSON Tests"

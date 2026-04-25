@@ -833,9 +833,14 @@ collect_file() {
     local display="${4:-$relative_path}"
     local dest_path="${bundle_dir}/${relative_path}"
 
+    if [[ -L "$src" ]]; then
+        [[ "$VERBOSE" == "true" ]] && log_detail "Skipping symlink: $display"
+        return 1
+    fi
+
     if [[ -f "$src" ]]; then
-        mkdir -p "$(dirname "$dest_path")"
-        cp "$src" "$dest_path" 2>/dev/null || {
+        mkdir -p -- "$(dirname "$dest_path")"
+        cp -- "$src" "$dest_path" 2>/dev/null || {
             log_warn "Could not copy: $display"
             return 1
         }
@@ -1216,21 +1221,18 @@ main() {
         # Collect recent install logs
         local log_count=0
         while IFS= read -r logfile; do
-            cp "$logfile" "$bundle_dir/logs/" 2>/dev/null && {
-                record_bundle_file "logs/$(basename "$logfile")"
+            collect_file "$logfile" "$bundle_dir" "logs/$(basename "$logfile")" "$(basename "$logfile")" && {
                 log_count=$((log_count + 1))
             }
-        done < <(find "$logs_dir" -name 'install-*.log' 2>/dev/null | sort -r | head -10)
+        done < <(find "$logs_dir" -type f -name 'install-*.log' 2>/dev/null | sort -r | head -10)
         [[ "$VERBOSE" == "true" ]] && log_detail "Collected $log_count log files"
     fi
 
     # --- Collect install summary JSONs ---
     if [[ -d "$logs_dir" ]]; then
         while IFS= read -r summary; do
-            cp "$summary" "$bundle_dir/logs/" 2>/dev/null && {
-                record_bundle_file "logs/$(basename "$summary")"
-            }
-        done < <(find "$logs_dir" -name 'install_summary_*.json' 2>/dev/null | sort -r | head -5)
+            collect_file "$summary" "$bundle_dir" "logs/$(basename "$summary")" "$(basename "$summary")" || true
+        done < <(find "$logs_dir" -type f -name 'install_summary_*.json' 2>/dev/null | sort -r | head -5)
     fi
 
     # --- Capture doctor JSON ---
