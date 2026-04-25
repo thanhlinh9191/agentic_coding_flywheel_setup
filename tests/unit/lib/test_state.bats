@@ -136,6 +136,21 @@ teardown() {
     assert_output "value"
 }
 
+@test "state: first lock acquisition succeeds under nounset" {
+    local state_root
+    state_root=$(create_temp_dir)
+
+    run env -i PATH="$PATH" HOME="$state_root/home" ACFS_HOME="$state_root/acfs" ACFS_STATE_FILE="$state_root/acfs/state.json" bash -u -c '
+        mkdir -p "$HOME" "$ACFS_HOME"
+        source "$1"
+        _state_acquire_lock
+        printf "locked=%s fd=%s\n" "${_ACFS_STATE_LOCKED:-}" "${ACFS_LOCK_FD:-}"
+        _state_release_lock
+    ' _ "$PROJECT_ROOT/scripts/lib/state.sh"
+    assert_success
+    assert_output --partial "locked=true fd="
+}
+
 @test "state: ubuntu upgrade helpers escape dynamic values" {
     state_init
 

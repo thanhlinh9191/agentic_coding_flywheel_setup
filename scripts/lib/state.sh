@@ -717,6 +717,13 @@ _state_acquire_lock() {
         return 1
     fi
 
+    # If a stale descriptor is present for another state file, close it before
+    # opening the descriptor for this lock. A freshly opened descriptor does not
+    # receive _ACFS_STATE_LOCK_FILE until after flock succeeds.
+    if [[ -n "${ACFS_LOCK_FD:-}" && "${_ACFS_STATE_LOCK_FILE:-}" != "$lock_file" ]]; then
+        _state_close_lock_fd
+    fi
+
     # Open lock file on FD 200 (same FD convention as autofix.sh)
     # Using >> to avoid truncating while opening for locking
     if [[ -z "${ACFS_LOCK_FD:-}" ]]; then
@@ -732,9 +739,7 @@ _state_acquire_lock() {
         fi
     fi
 
-    if [[ -n "${ACFS_LOCK_FD:-}" && "${_ACFS_STATE_LOCK_FILE:-}" != "$lock_file" ]]; then
-        _state_close_lock_fd
-    fi
+    [[ -n "${ACFS_LOCK_FD:-}" ]] || return 1
 
     local lock_timeout="${ACFS_STATE_LOCK_TIMEOUT:-30}"
     if [[ ! "$lock_timeout" =~ ^[0-9]+$ ]] || [[ "$lock_timeout" -lt 1 ]]; then
