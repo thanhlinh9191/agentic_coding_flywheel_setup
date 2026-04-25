@@ -2780,6 +2780,31 @@ EOF
     update_run_in_target_context "" bash -c "$build_cmd"
 }
 
+# shellcheck disable=SC2317,SC2329  # invoked indirectly via run_cmd()
+update_run_cargo_git_source_install() {
+    local repo_url="${1:-}"
+    local binary_name="${2:-}"
+
+    if [[ -z "$repo_url" || -z "$binary_name" ]]; then
+        echo "update_run_cargo_git_source_install requires repo URL and binary name" >&2
+        return 1
+    fi
+
+    local build_cmd
+    build_cmd="$(cat <<'EOF'
+set -euo pipefail
+mkdir -p "$HOME/.cargo/bin"
+ACFS_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/acfs_cargo_build.XXXXXX")"
+trap '[ -n "$ACFS_TMP_DIR" ] && rm -rf "$ACFS_TMP_DIR"' EXIT
+git clone --depth 1 "$1" "$ACFS_TMP_DIR/src"
+cd "$ACFS_TMP_DIR/src"
+cargo build --release
+cp "target/release/$2" "$HOME/.cargo/bin/$2"
+EOF
+)"
+    update_run_in_target_context "" bash -c "$build_cmd" _ "$repo_url" "$binary_name"
+}
+
 # ============================================================
 # Verified Installer Wrappers
 # ============================================================
@@ -3995,7 +4020,7 @@ update_cloud() {
         if [[ -z "$supabase_primary_bin" ]]; then
             log_item "fail" "Supabase CLI" "unable to resolve target install bin"
         else
-            run_cmd "Supabase CLI" env "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"
+            run_cmd "Supabase CLI" update_run_in_target_context "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"
             # Refresh PATH in case the target bin was created during install.
             ensure_path
             if capture_version_after "supabase"; then
@@ -4389,14 +4414,14 @@ update_stack() {
     # ASCII Art Diagram Corrector (aadc) - update when installed, or install with --force
     if update_binary_exists aadc || [[ "$FORCE_MODE" == "true" ]]; then
         capture_version_before "aadc"
-        run_cmd "AADC" bash -c 'ACFS_TMP_DIR="$(mktemp -d)"; trap "[ -n \\\"$ACFS_TMP_DIR\\\" ] && rm -rf \\\"$ACFS_TMP_DIR\\\"" EXIT; git clone --depth 1 https://github.com/Dicklesworthstone/aadc.git "$ACFS_TMP_DIR/aadc" && cd "$ACFS_TMP_DIR/aadc" && cargo build --release && cp target/release/aadc ~/.cargo/bin/'
+        run_cmd "AADC" update_run_cargo_git_source_install https://github.com/Dicklesworthstone/aadc.git aadc
         capture_version_after "aadc"
     fi
 
     # Rust Proxy (rust_proxy) - update when installed, or install with --force
     if update_binary_exists rust_proxy || [[ "$FORCE_MODE" == "true" ]]; then
         capture_version_before "rust_proxy"
-        run_cmd "Rust Proxy" bash -c 'ACFS_TMP_DIR="$(mktemp -d)"; trap "[ -n \\\"$ACFS_TMP_DIR\\\" ] && rm -rf \\\"$ACFS_TMP_DIR\\\"" EXIT; git clone --depth 1 https://github.com/Dicklesworthstone/rust_proxy.git "$ACFS_TMP_DIR/rust_proxy" && cd "$ACFS_TMP_DIR/rust_proxy" && cargo build --release && cp target/release/rust_proxy ~/.cargo/bin/'
+        run_cmd "Rust Proxy" update_run_cargo_git_source_install https://github.com/Dicklesworthstone/rust_proxy.git rust_proxy
         capture_version_after "rust_proxy"
     fi
 

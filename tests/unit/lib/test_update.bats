@@ -756,6 +756,24 @@ EOF
     run grep -F 'update_run_in_target_context "" "$cargo_bin" install --git https://github.com/Dicklesworthstone/meta_skill --force' "$update"
     assert_success
 
+    run grep -F 'run_cmd "Supabase CLI" update_run_in_target_context "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"' "$update"
+    assert_success
+
+    run grep -F 'run_cmd "Supabase CLI" env "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"' "$update"
+    assert_failure
+
+    run grep -F 'run_cmd "AADC" update_run_cargo_git_source_install https://github.com/Dicklesworthstone/aadc.git aadc' "$update"
+    assert_success
+
+    run grep -F 'run_cmd "Rust Proxy" update_run_cargo_git_source_install https://github.com/Dicklesworthstone/rust_proxy.git rust_proxy' "$update"
+    assert_success
+
+    run grep -F 'run_cmd "AADC" bash -c' "$update"
+    assert_failure
+
+    run grep -F 'run_cmd "Rust Proxy" bash -c' "$update"
+    assert_failure
+
     run grep -F 'run_cmd "DCG Hook" "$dcg_bin" install --force' "$update"
     assert_success
 
@@ -7644,6 +7662,26 @@ SECURITY
     run update_run_verified_installer_with_env "test_tool" "TEST-ENV=value" "--flag"
     assert_failure
     assert_output --partial "Invalid inline env assignment"
+}
+
+@test "update cargo git source installer delegates through target context" {
+    update_run_in_target_context() {
+        printf 'env=%s\n' "$1"
+        printf 'cmd=%s\n' "$2"
+        printf 'mode=%s\n' "$3"
+        printf 'sentinel=%s\n' "$5"
+        printf 'repo=%s\n' "$6"
+        printf 'binary=%s\n' "$7"
+    }
+
+    run update_run_cargo_git_source_install "https://example.test/tool.git" "tool-bin"
+    assert_success
+    assert_output --partial "env="
+    assert_output --partial "cmd=bash"
+    assert_output --partial "mode=-c"
+    assert_output --partial "sentinel=_"
+    assert_output --partial "repo=https://example.test/tool.git"
+    assert_output --partial "binary=tool-bin"
 }
 
 @test "update fsfs installer uses Linux lite release artifact args" {
