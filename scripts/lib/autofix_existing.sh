@@ -312,6 +312,25 @@ autofix_existing_cleanup_failed_installation_backup_dir() {
     return 0
 }
 
+autofix_existing_cleanup_temp_paths() {
+    local path=""
+
+    for path in "$@"; do
+        if [[ -n "$path" ]]; then
+            rm -f -- "$path" 2>/dev/null || true
+        fi
+    done
+}
+
+autofix_existing_cleanup_failed_installation_backup_if_needed() {
+    local should_cleanup="${1:-false}"
+    local backup_dir="${2:-}"
+
+    if [[ "$should_cleanup" == "true" && -n "$backup_dir" ]]; then
+        autofix_existing_cleanup_failed_installation_backup_dir "$backup_dir" || true
+    fi
+}
+
 autofix_existing_rollback_changes_since() {
     local start_index="${1:-0}"
     local i=0
@@ -402,11 +421,10 @@ autofix_existing_drop_changes_since() {
         return 1
     }
     undos_tmp="$(mktemp -p "$undos_dir" ".tmp.XXXXXX" 2>/dev/null)" || {
-        rm -f "$changes_tmp" 2>/dev/null || true
+        autofix_existing_cleanup_temp_paths "$changes_tmp"
         log_error "[ROLLBACK] Failed to create temp file while pruning undo journal"
         return 1
     }
-    trap 'rm -f "${changes_tmp:-}" "${undos_tmp:-}" "${changes_backup:-}" "${undos_backup:-}" 2>/dev/null || true; trap - RETURN' RETURN
 
     for ((i=start_index; i<${#ACFS_CHANGE_ORDER[@]}; i++)); do
         dropped_ids+=("${ACFS_CHANGE_ORDER[$i]}")
@@ -414,11 +432,13 @@ autofix_existing_drop_changes_since() {
 
     if ! drop_ids_json="$(printf '%s\n' "${dropped_ids[@]}" | jq -R . | jq -s '.')"; then
         log_error "[ROLLBACK] Failed to serialize dropped change IDs for journal pruning"
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     fi
 
     : > "$changes_tmp" || {
         log_error "[ROLLBACK] Failed to initialize pruned change journal"
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     }
     if [[ -f "$ACFS_CHANGES_FILE" ]] && [[ ${#dropped_ids[@]} -gt 0 ]]; then
@@ -426,12 +446,14 @@ autofix_existing_drop_changes_since() {
             'select((.id // "") as $id | ($dropped_ids | index($id) | not))' \
             "$ACFS_CHANGES_FILE" > "$changes_tmp"; then
             log_error "[ROLLBACK] Failed to rewrite change journal while pruning aborted changes"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         fi
     fi
 
     : > "$undos_tmp" || {
         log_error "[ROLLBACK] Failed to initialize pruned undo journal"
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     }
     if [[ -f "$ACFS_UNDOS_FILE" ]] && [[ ${#dropped_ids[@]} -gt 0 ]]; then
@@ -439,6 +461,7 @@ autofix_existing_drop_changes_since() {
             'select((.undone // "") as $id | ($dropped_ids | index($id) | not))' \
             "$ACFS_UNDOS_FILE" > "$undos_tmp"; then
             log_error "[ROLLBACK] Failed to rewrite undo journal while pruning aborted changes"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         fi
     fi
@@ -447,10 +470,12 @@ autofix_existing_drop_changes_since() {
         changes_existed=true
         changes_backup="$(mktemp -p "$changes_dir" ".orig.XXXXXX" 2>/dev/null)" || {
             log_error "[ROLLBACK] Failed to create backup file for change journal pruning"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         }
         if ! cp -p "$ACFS_CHANGES_FILE" "$changes_backup"; then
             log_error "[ROLLBACK] Failed to back up change journal before pruning"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         fi
         if ! fsync_file "$changes_backup"; then
@@ -462,10 +487,12 @@ autofix_existing_drop_changes_since() {
         undos_existed=true
         undos_backup="$(mktemp -p "$undos_dir" ".orig.XXXXXX" 2>/dev/null)" || {
             log_error "[ROLLBACK] Failed to create backup file for undo journal pruning"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         }
         if ! cp -p "$ACFS_UNDOS_FILE" "$undos_backup"; then
             log_error "[ROLLBACK] Failed to back up undo journal before pruning"
+            autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
             return 1
         fi
         if ! fsync_file "$undos_backup"; then
@@ -475,10 +502,12 @@ autofix_existing_drop_changes_since() {
 
     if ! fsync_file "$changes_tmp"; then
         log_error "[ROLLBACK] Failed to sync pruned change journal"
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     fi
     if ! mv "$changes_tmp" "$ACFS_CHANGES_FILE"; then
         log_error "[ROLLBACK] Failed to replace change journal with pruned state"
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     fi
     if ! fsync_directory "$changes_dir"; then
@@ -490,6 +519,7 @@ autofix_existing_drop_changes_since() {
         if ! autofix_existing_restore_journal_file_from_backup "$ACFS_CHANGES_FILE" "$changes_backup" "$changes_existed"; then
             log_error "[ROLLBACK] Failed to restore change journal after undo journal sync failure"
         fi
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     fi
     if ! mv "$undos_tmp" "$ACFS_UNDOS_FILE"; then
@@ -497,6 +527,7 @@ autofix_existing_drop_changes_since() {
         if ! autofix_existing_restore_journal_file_from_backup "$ACFS_CHANGES_FILE" "$changes_backup" "$changes_existed"; then
             log_error "[ROLLBACK] Failed to restore change journal after undo journal replacement failure"
         fi
+        autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
         return 1
     fi
     if ! fsync_directory "$undos_dir"; then
@@ -508,6 +539,7 @@ autofix_existing_drop_changes_since() {
     done
     ACFS_CHANGE_ORDER=("${ACFS_CHANGE_ORDER[@]:0:start_index}")
 
+    autofix_existing_cleanup_temp_paths "$changes_tmp" "$undos_tmp" "$changes_backup" "$undos_backup"
     return 0
 }
 
@@ -1220,13 +1252,6 @@ create_installation_backup() {
     local cleanup_backup_dir_on_failure=false
     local -a backed_up_items=()
 
-    trap '
-        if [[ "${cleanup_backup_dir_on_failure:-false}" == "true" && -n "${backup_dir:-}" ]]; then
-            autofix_existing_cleanup_failed_installation_backup_dir "$backup_dir" || true
-        fi
-        trap - RETURN
-    ' RETURN
-
     runtime_home="$(autofix_existing_runtime_home 2>/dev/null || true)"
     [[ -n "$runtime_home" ]] || return 1
     backup_dir_base="$runtime_home/.acfs-backup-$(date +%Y%m%d_%H%M%S)"
@@ -1244,6 +1269,7 @@ create_installation_backup() {
     cleanup_backup_dir_on_failure=true
     if ! fsync_directory "$(dirname "$backup_dir")"; then
         log_error "[CLEAN] Failed to fsync backup directory parent: $(dirname "$backup_dir")"
+        autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
         return 1
     fi
 
@@ -1271,40 +1297,47 @@ create_installation_backup() {
             dest="$backup_dir/$dest_rel"
             if ! mkdir -p "$(dirname "$dest")"; then
                 log_error "[CLEAN] Failed to create backup parent directory for: $dest"
+                autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                 return 1
             fi
 
             if [[ "$artifact_type" == "directory" || "$artifact_type" == "symlink" ]]; then
                 if ! cp -rp "$artifact" "$dest" 2>/dev/null; then
                     log_error "[CLEAN] Failed to back up $artifact_type: $artifact"
+                    autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                     return 1
                 fi
             else
                 if ! cp -p "$artifact" "$dest" 2>/dev/null; then
                     log_error "[CLEAN] Failed to back up file: $artifact"
+                    autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                     return 1
                 fi
             fi
             if ! autofix_sync_backup_path "$dest"; then
                 log_error "[CLEAN] Failed to fsync backup artifact: $dest"
+                autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                 return 1
             fi
 
             checksum="$(calculate_backup_checksum "$artifact" 2>/dev/null || true)"
             if [[ -z "$checksum" ]]; then
                 log_error "[CLEAN] Failed to checksum original artifact: $artifact"
+                autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                 return 1
             fi
 
             backup_checksum="$(calculate_backup_checksum "$dest" 2>/dev/null || true)"
             if [[ -z "$backup_checksum" ]]; then
                 log_error "[CLEAN] Failed to checksum backup artifact: $dest"
+                autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                 return 1
             fi
             if [[ "$backup_checksum" != "$checksum" ]]; then
                 log_error "[CLEAN] Backup verification failed for: $artifact"
                 log_error "[CLEAN]   Original checksum: $checksum"
                 log_error "[CLEAN]   Backup checksum:   $backup_checksum"
+                autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
                 return 1
             fi
 
@@ -1321,6 +1354,7 @@ create_installation_backup() {
     # Write manifest
     if ! items_json=$(printf '%s\n' "${backed_up_items[@]}" | jq -s '.'); then
         log_error "[CLEAN] Failed to serialize backup manifest entries"
+        autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
         return 1
     fi
 
@@ -1329,10 +1363,12 @@ create_installation_backup() {
         --argjson items "$items_json" \
         '{created: $created, backed_up_items: $items}' > "$backup_manifest"; then
         log_error "[CLEAN] Failed to write backup manifest: $backup_manifest"
+        autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
         return 1
     fi
     if ! fsync_file "$backup_manifest"; then
         log_error "[CLEAN] Failed to fsync backup manifest: $backup_manifest"
+        autofix_existing_cleanup_failed_installation_backup_if_needed "$cleanup_backup_dir_on_failure" "$backup_dir"
         return 1
     fi
 
