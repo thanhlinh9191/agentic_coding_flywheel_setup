@@ -1778,6 +1778,68 @@ test_undo_change_leaves_pending_state_when_completion_persist_fails() {
     return 0
 }
 
+test_undo_change_marks_failed_when_executor_missing_after_pending() {
+    setup_test_env
+
+    if ! start_autofix_session 2>/dev/null; then
+        echo "  Failed to start session"
+        cleanup_test_env
+        return 1
+    fi
+
+    local output_file="$ACFS_STATE_DIR/change_id.out"
+    if ! record_change "test" "Undo executor missing" "true" "false" "info" '[]' '[]' '[]' >"$output_file" 2>/dev/null; then
+        echo "  Failed to seed change for missing-executor test"
+        end_autofix_session 2>/dev/null || true
+        cleanup_test_env
+        return 1
+    fi
+
+    local change_id original_autofix_system_binary_path status=0 undo_status="" undo_line_count=0
+    change_id="$(cat "$output_file")"
+    original_autofix_system_binary_path="$(declare -f autofix_system_binary_path)"
+    autofix_system_binary_path() {
+        return 1
+    }
+
+    if undo_change "$change_id" true true >/dev/null 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
+
+    eval "$original_autofix_system_binary_path"
+
+    if [[ $status -eq 0 ]]; then
+        echo "  undo_change succeeded even though bash lookup failed"
+        end_autofix_session 2>/dev/null || true
+        cleanup_test_env
+        return 1
+    fi
+
+    undo_line_count=$(wc -l < "$ACFS_UNDOS_FILE")
+    undo_status="$(autofix_change_undo_status "$change_id" 2>/dev/null || true)"
+    if [[ "$undo_line_count" -ne 2 ]] || [[ "$undo_status" != "failed" ]]; then
+        echo "  Missing executor should leave failed undo state, not pending"
+        echo "  lines=$undo_line_count status=$undo_status file=$(cat "$ACFS_UNDOS_FILE" 2>/dev/null || true)"
+        end_autofix_session 2>/dev/null || true
+        cleanup_test_env
+        return 1
+    fi
+
+    if ! jq -e '.[0].status == "pending" and .[1].status == "failed" and .[1].exit_code == 127' < <(jq -s . "$ACFS_UNDOS_FILE") >/dev/null; then
+        echo "  Undo journal did not record pending then failed executor state"
+        cat "$ACFS_UNDOS_FILE"
+        end_autofix_session 2>/dev/null || true
+        cleanup_test_env
+        return 1
+    fi
+
+    end_autofix_session 2>/dev/null || true
+    cleanup_test_env
+    return 0
+}
+
 # Test: Manual/non-reversible changes cannot be falsely marked undone
 test_undo_change_rejects_manual_non_reversible_change() {
     setup_test_env
@@ -2252,6 +2314,7 @@ main() {
     run_test test_undo_change
     run_test test_undo_change_fails_when_append_atomic_fails
     run_test test_undo_change_leaves_pending_state_when_completion_persist_fails
+    run_test test_undo_change_marks_failed_when_executor_missing_after_pending
     run_test test_undo_change_rejects_manual_non_reversible_change
     run_test test_acfs_undo_command_category_handles_quotes
     run_test test_acfs_undo_command_all_skips_undone_changes

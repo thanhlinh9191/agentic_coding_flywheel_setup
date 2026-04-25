@@ -1378,6 +1378,24 @@ is_change_undone() {
     [[ "$undo_status" == "applied" ]]
 }
 
+autofix_append_failed_undo_record() {
+    local change_id="$1"
+    local undo_exit_code="${2:-1}"
+    local failed_record=""
+
+    [[ "$undo_exit_code" =~ ^[0-9]+$ ]] || undo_exit_code=1
+    if ! failed_record=$(jq -cn \
+        --arg id "$change_id" \
+        --arg ts "$(date -Iseconds)" \
+        --argjson code "$undo_exit_code" \
+        --arg status "failed" \
+        '{undone: $id, timestamp: $ts, exit_code: $code, status: $status}'); then
+        return 1
+    fi
+
+    append_atomic "$ACFS_UNDOS_FILE" "$failed_record"
+}
+
 # Undo a specific change
 undo_change() {
     local change_id="$1"
@@ -1505,6 +1523,9 @@ undo_change() {
     bash_bin="$(autofix_system_binary_path bash 2>/dev/null || true)"
     if [[ -z "$bash_bin" ]]; then
         log_error "Unable to locate bash for undo command"
+        if ! autofix_append_failed_undo_record "$change_id" 127; then
+            log_error "Failed to persist failed undo record for $change_id; undo state remains pending"
+        fi
         return 1
     fi
     if [[ "$requires_root" == "true" ]]; then
@@ -1514,6 +1535,9 @@ undo_change() {
             sudo_bin="$(autofix_system_binary_path sudo 2>/dev/null || true)"
             if [[ -z "$sudo_bin" ]]; then
                 log_error "Undo command requires root but sudo is unavailable"
+                if ! autofix_append_failed_undo_record "$change_id" 127; then
+                    log_error "Failed to persist failed undo record for $change_id; undo state remains pending"
+                fi
                 return 1
             fi
             sudo_cmd=("$sudo_bin")
@@ -1524,18 +1548,7 @@ undo_change() {
     fi
 
     if [[ $undo_exit_code -ne 0 ]]; then
-        local failed_record=""
-        if ! failed_record=$(jq -cn \
-            --arg id "$change_id" \
-            --arg ts "$(date -Iseconds)" \
-            --argjson code "$undo_exit_code" \
-            --arg status "failed" \
-            '{undone: $id, timestamp: $ts, exit_code: $code, status: $status}'); then
-            log_error "Undo command failed with exit code $undo_exit_code"
-            log_error "Failed to build failed undo record for $change_id"
-            return 1
-        fi
-        if ! append_atomic "$ACFS_UNDOS_FILE" "$failed_record"; then
+        if ! autofix_append_failed_undo_record "$change_id" "$undo_exit_code"; then
             log_error "Undo command failed with exit code $undo_exit_code"
             log_error "Failed to persist failed undo record for $change_id; undo state remains pending"
             return 1
