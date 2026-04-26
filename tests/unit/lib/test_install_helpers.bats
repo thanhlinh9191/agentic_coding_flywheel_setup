@@ -95,21 +95,24 @@ teardown() {
     out=$(run_as_target_shell "echo test")
     
     # Check key parts instead of exact string to avoid expansion hell.
-    # PATH data must be passed through env, not interpolated into shell source.
-    if [[ "$out" != *"run_as_target called with: env ACFS_TARGET_PATH_PREFIX="* ]]; then
-        fail "Did not pass target path prefix as env data"
+    # The shell source must be a fixed wrapper; command data is passed as $1.
+    if [[ "$out" != *"run_as_target called with: "* ]]; then
+        fail "Did not call run_as_target with env-backed bash path"
+    fi
+    if [[ "$out" != *" ACFS_BASH_BIN="* ]]; then
+        fail "Did not pass bash path as env data"
     fi
     if [[ "$out" != *" bash -c "* ]]; then
         fail "Did not call bash -c"
     fi
-    if [[ "$out" != *'export PATH="${ACFS_TARGET_PATH_PREFIX}:$PATH"'* ]]; then
-        fail "Did not export PATH"
+    if [[ "$out" != *'_acfs_primary_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"'* ]]; then
+        fail "Did not compute primary bin from runtime HOME"
     fi
-    if [[ "$out" != *"\$HOME/.local/bin"* ]]; then
-        fail "Did not include user paths (literal \$HOME)"
+    if [[ "$out" != *'export PATH="${_acfs_primary_bin}:$HOME/.local/bin:$HOME/.acfs/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.atuin/bin:$HOME/go/bin:$PATH"'* ]]; then
+        fail "Did not export user tool PATH"
     fi
-    if [[ "$out" != *"echo test"* ]]; then
-        fail "Did not include command"
+    if [[ "$out" != *'eval "$1" _ echo test'* ]]; then
+        fail "Did not pass command as argv data"
     fi
 }
 
@@ -121,6 +124,21 @@ teardown() {
     assert_success
     assert_output "ok"
     [[ ! -e "$marker" ]] || fail "ACFS_BIN_DIR command substitution executed"
+}
+
+@test "run_as_current_shell: resolves HOME-relative tool paths" {
+    export HOME="$BATS_TEST_TMPDIR/home"
+    export PATH="/usr/bin:/bin"
+    mkdir -p "$HOME/.cargo/bin"
+    cat > "$HOME/.cargo/bin/acfs-home-path-tool" <<'EOF'
+#!/usr/bin/env bash
+printf 'home-path-ok\n'
+EOF
+    chmod +x "$HOME/.cargo/bin/acfs-home-path-tool"
+
+    run run_as_current_shell "acfs-home-path-tool"
+    assert_success
+    assert_output "home-path-ok"
 }
 
 @test "run_as_current_shell stdin mode treats ACFS_BIN_DIR as inert PATH data" {
@@ -145,6 +163,45 @@ teardown() {
     assert_success
     assert_output "ok"
     [[ ! -e "$marker" ]] || fail "ACFS_BIN_DIR command substitution executed"
+}
+
+@test "run_as_root_shell: sudo path passes command as argv and keeps ACFS_BIN_DIR inert" {
+    [[ "$EUID" -ne 0 ]] || skip "sudo path is bypassed when tests run as root"
+
+    local marker="$BATS_TEST_TMPDIR/root-shell-path-injection"
+    local fake_sudo="$BATS_TEST_TMPDIR/fake-sudo"
+    export CAPTURE_FILE="$BATS_TEST_TMPDIR/root-shell-sudo-argv.txt"
+    export ACFS_BIN_DIR="\$(printf pwn > '$marker')"
+    export SUDO="$fake_sudo"
+
+    cat > "$fake_sudo" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$CAPTURE_FILE"
+exec "$@"
+EOF
+    chmod +x "$fake_sudo"
+
+    run run_as_root_shell "printf 'root-ok\n'"
+    assert_success
+    assert_output "root-ok"
+    [[ ! -e "$marker" ]] || fail "ACFS_BIN_DIR command substitution executed"
+
+    local -a argv=()
+    mapfile -t argv < "$CAPTURE_FILE"
+    local wrapper=""
+    local command_arg=""
+    local idx
+    for idx in "${!argv[@]}"; do
+        if [[ "${argv[$idx]}" == "-c" ]]; then
+            wrapper="${argv[$((idx + 1))]:-}"
+            command_arg="${argv[$((idx + 3))]:-}"
+            break
+        fi
+    done
+
+    [[ "$wrapper" == *'eval "$1"'* ]] || fail "Expected sudo shell wrapper to eval argv command, got: $wrapper"
+    [[ "$wrapper" != *"root-ok"* ]] || fail "Command was embedded in sudo shell wrapper: $wrapper"
+    [[ "$command_arg" == "printf 'root-ok\n'" ]] || fail "Expected command as argv data, got: $command_arg"
 }
 
 @test "run_as_target_shell stdin mode treats ACFS_BIN_DIR as inert PATH data" {
@@ -606,7 +663,11 @@ teardown() {
 
     local captured
     captured="$(cat "$CAPTURE_FILE")"
-    [[ "$captured" == *'env ACFS_TARGET_PATH_PREFIX=$HOME/.local/bin:$HOME/.acfs/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.atuin/bin:$HOME/go/bin bash -c export PATH="$ACFS_TARGET_PATH_PREFIX:$PATH"; command -v br'* ]] \
+    [[ "$captured" == *'_acfs_primary_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"'* ]] \
+        || fail "Expected target-user installed check to compute runtime primary bin, got: $captured"
+    [[ "$captured" == *'export PATH="${_acfs_primary_bin}:$HOME/.local/bin:$HOME/.acfs/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$HOME/.atuin/bin:$HOME/go/bin:$PATH"'* ]] \
+        || fail "Expected target-user installed check to extend PATH, got: $captured"
+    [[ "$captured" == *'eval "$1" _ command -v br'* ]] \
         || fail "Expected target-user installed check to extend PATH, got: $captured"
 }
 
