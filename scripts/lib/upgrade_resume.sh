@@ -230,6 +230,7 @@ remove_motd() {
 mark_state_complete() {
     if [[ -f "$ACFS_STATE_FILE" ]] && command -v jq &>/dev/null; then
         local tmp_file=""
+        local completed_at=""
         tmp_file="$(mktemp "${ACFS_STATE_FILE}.tmp.XXXXXX" 2>/dev/null)" || tmp_file=""
 
         if [[ -z "$tmp_file" ]]; then
@@ -237,7 +238,14 @@ mark_state_complete() {
             return 0
         fi
 
-        if jq '.ubuntu_upgrade.current_stage = "completed" | .ubuntu_upgrade.needs_reboot = false' "$ACFS_STATE_FILE" > "$tmp_file" 2>/dev/null; then
+        completed_at="$(date -Iseconds)"
+        if jq --arg now "$completed_at" '
+            .ubuntu_upgrade.current_stage = "completed" |
+            .ubuntu_upgrade.completed_at = $now |
+            .ubuntu_upgrade.needs_reboot = false |
+            .ubuntu_upgrade.resume_after_reboot = false |
+            .ubuntu_upgrade.current_upgrade = null
+        ' "$ACFS_STATE_FILE" > "$tmp_file" 2>/dev/null; then
             if mv "$tmp_file" "$ACFS_STATE_FILE" 2>/dev/null; then
                 log "State updated to 'completed'"
             else

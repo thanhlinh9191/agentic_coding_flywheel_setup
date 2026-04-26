@@ -1400,6 +1400,7 @@ state_upgrade_resumed() {
 
     state_update "
         .ubuntu_upgrade.needs_reboot = false |
+        .ubuntu_upgrade.resume_after_reboot = false |
         .ubuntu_upgrade.current_stage = \"resumed\"
     "
 }
@@ -1500,7 +1501,8 @@ state_upgrade_mark_complete() {
         .ubuntu_upgrade.current_stage = "completed" |
         .ubuntu_upgrade.completed_at = $now |
         .ubuntu_upgrade.needs_reboot = false |
-        .ubuntu_upgrade.resume_after_reboot = false
+        .ubuntu_upgrade.resume_after_reboot = false |
+        .ubuntu_upgrade.current_upgrade = null
         ' \
         --arg now "$now"
 }

@@ -136,7 +136,7 @@ check_upgrade_path() {
     local target_num=2510
     while [[ $current -lt $target_num ]]; do
         local next
-        next=$(ubuntu_get_next_version_hardcoded "$current")
+        next=$(ubuntu_get_next_version_hardcoded "$current" || true)
         if [[ -z "$next" ]]; then
             break
         fi
@@ -158,7 +158,7 @@ check_upgrade_path() {
     echo ""
     echo -e "  ${GRAY}From 25.10 to $target:${NC}"
     local next_from_2510
-    next_from_2510=$(ubuntu_get_next_version_hardcoded 2510)
+    next_from_2510=$(ubuntu_get_next_version_hardcoded 2510 || true)
     if [[ -z "$next_from_2510" ]]; then
         print_ok "25.10 is already at target (no upgrade needed)"
     else
@@ -255,6 +255,17 @@ check_systemd_service() {
     local resume_script="$PROJECT_ROOT/scripts/lib/upgrade_resume.sh"
     if [[ -f "$resume_script" ]]; then
         print_ok "Resume script exists: $resume_script"
+        local complete_block=""
+        complete_block="$(sed -n '/^mark_state_complete()/,/^}/p' "$resume_script")"
+        if [[ "$complete_block" == *'.ubuntu_upgrade.current_stage = "completed"'* ]] \
+            && [[ "$complete_block" == *'.ubuntu_upgrade.completed_at = $now'* ]] \
+            && [[ "$complete_block" == *'.ubuntu_upgrade.needs_reboot = false'* ]] \
+            && [[ "$complete_block" == *'.ubuntu_upgrade.resume_after_reboot = false'* ]] \
+            && [[ "$complete_block" == *'.ubuntu_upgrade.current_upgrade = null'* ]]; then
+            print_ok "Resume script writes a complete terminal upgrade state"
+        else
+            print_fail "Resume script completion state is incomplete"
+        fi
     else
         print_fail "Resume script not found"
     fi

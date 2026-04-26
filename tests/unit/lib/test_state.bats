@@ -175,6 +175,24 @@ teardown() {
     run state_get ".ubuntu_upgrade.completed_upgrades[0].to"
     assert_output '25.04"; done'
 
+    run state_upgrade_needs_reboot
+    assert_success
+
+    run state_get ".ubuntu_upgrade.resume_after_reboot"
+    assert_output "true"
+
+    run state_upgrade_resumed
+    assert_success
+
+    run state_get ".ubuntu_upgrade.current_stage"
+    assert_output "resumed"
+
+    run state_get ".ubuntu_upgrade.needs_reboot | tostring"
+    assert_output "false"
+
+    run state_get ".ubuntu_upgrade.resume_after_reboot | tostring"
+    assert_output "false"
+
     run state_upgrade_set_error 'failed "quoted" upgrade'
     assert_success
 
@@ -186,6 +204,16 @@ teardown() {
 
     run state_get ".ubuntu_upgrade.current_stage"
     assert_output "completed"
+
+    run state_get ".ubuntu_upgrade.resume_after_reboot | tostring"
+    assert_output "false"
+
+    run state_get ".ubuntu_upgrade.current_upgrade"
+    assert_output ""
+
+    run state_get ".ubuntu_upgrade.completed_at"
+    assert_success
+    [[ -n "$output" ]]
 }
 
 @test "state: get file prefers passwd-resolved target home when ACFS_HOME unset" {
