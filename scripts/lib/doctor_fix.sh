@@ -629,16 +629,20 @@ doctor_fix_build_remove_binary_rollback() {
 doctor_fix_run_rollback_command() {
     local rollback_command="$1"
     local requires_root="${2:-false}"
-    local sudo_cmd=""
+    local -a sudo_cmd=()
 
     [[ -n "$rollback_command" ]] || return 1
 
     if [[ "$requires_root" == "true" ]]; then
-        [[ $EUID -ne 0 ]] && command -v sudo &>/dev/null && sudo_cmd="sudo"
+        [[ $EUID -ne 0 ]] && command -v sudo &>/dev/null && sudo_cmd=(sudo -n)
+        if [[ $EUID -ne 0 && ${#sudo_cmd[@]} -eq 0 ]]; then
+            doctor_fix_log ERROR "Rollback requires root but sudo is unavailable"
+            return 1
+        fi
     fi
 
-    if [[ -n "$sudo_cmd" ]]; then
-        $sudo_cmd bash -c "$rollback_command"
+    if [[ ${#sudo_cmd[@]} -gt 0 ]]; then
+        "${sudo_cmd[@]}" bash -c "$rollback_command"
     else
         bash -c "$rollback_command"
     fi

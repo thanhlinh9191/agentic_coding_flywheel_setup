@@ -514,6 +514,113 @@ EOF
     cleanup_test_env
     return 1
 }
+
+test_doctor_fix_run_rollback_command_requires_root_fails_without_sudo() {
+    local temp_dir=""
+    local temp_bin=""
+    local bash_bin=""
+    local marker=""
+    local old_path=""
+    local status=0
+
+    if [[ $EUID -eq 0 ]]; then
+        return 0
+    fi
+
+    temp_dir="$(mktemp -d)"
+    temp_bin="$temp_dir/bin"
+    marker="$temp_dir/rollback-ran"
+    mkdir -p "$temp_bin"
+
+    bash_bin="$(command -v bash 2>/dev/null || true)"
+    [[ -n "$bash_bin" ]] || return 1
+    ln -s "$bash_bin" "$temp_bin/bash"
+
+    doctor_fix_log() {
+        :
+    }
+
+    old_path="$PATH"
+    PATH="$temp_bin"
+    doctor_fix_run_rollback_command "printf ran > '$marker'" true >/dev/null 2>&1
+    status=$?
+    PATH="$old_path"
+
+    if [[ $status -eq 0 ]]; then
+        echo "  Expected root-required rollback to fail without sudo"
+        return 1
+    fi
+    if [[ -e "$marker" ]]; then
+        echo "  Rollback command ran without required root privileges"
+        return 1
+    fi
+
+    return 0
+}
+
+test_doctor_fix_run_rollback_command_uses_noninteractive_sudo() {
+    local temp_dir=""
+    local temp_bin=""
+    local bash_bin=""
+    local marker=""
+    local sudo_log=""
+    local sudo_args=""
+    local old_path=""
+    local status=0
+
+    if [[ $EUID -eq 0 ]]; then
+        return 0
+    fi
+
+    temp_dir="$(mktemp -d)"
+    temp_bin="$temp_dir/bin"
+    marker="$temp_dir/rollback-ran"
+    sudo_log="$temp_dir/sudo-args"
+    mkdir -p "$temp_bin"
+
+    bash_bin="$(command -v bash 2>/dev/null || true)"
+    [[ -n "$bash_bin" ]] || return 1
+    ln -s "$bash_bin" "$temp_bin/bash"
+    cat > "$temp_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$ACFS_FAKE_SUDO_LOG"
+if [[ "${1:-}" != "-n" ]]; then
+    exit 42
+fi
+shift
+exec "$@"
+EOF
+    chmod +x "$temp_bin/sudo"
+
+    doctor_fix_log() {
+        :
+    }
+
+    old_path="$PATH"
+    PATH="$temp_bin"
+    export ACFS_FAKE_SUDO_LOG="$sudo_log"
+    doctor_fix_run_rollback_command "printf ran > '$marker'" true >/dev/null 2>&1
+    status=$?
+    unset ACFS_FAKE_SUDO_LOG
+    PATH="$old_path"
+
+    if [[ $status -ne 0 ]]; then
+        echo "  Expected root-required rollback to run through noninteractive sudo"
+        return 1
+    fi
+    if [[ ! -e "$marker" ]]; then
+        echo "  Rollback command did not run through fake sudo"
+        return 1
+    fi
+    sudo_args="$(<"$sudo_log")"
+    if [[ "$sudo_args" != -n\ bash\ -c\ * ]]; then
+        echo "  Expected sudo to be invoked with -n, got: $sudo_args"
+        return 1
+    fi
+
+    return 0
+}
+
 # ============================================================
 # Test: file_contains_line helper
 # ============================================================
@@ -3330,6 +3437,8 @@ main() {
     run_test test_doctor_fix_runtime_home_fails_closed_for_unresolved_target_with_stale_target_home
     run_test test_doctor_fix_runtime_bin_dir_ignores_other_user_bin_dir
     run_test test_doctor_fix_binary_path_ignores_other_user_bin_dir
+    run_test test_doctor_fix_run_rollback_command_requires_root_fails_without_sudo
+    run_test test_doctor_fix_run_rollback_command_uses_noninteractive_sudo
 
     # fix_path_ordering tests
     run_test test_fix_path_ordering_applies
