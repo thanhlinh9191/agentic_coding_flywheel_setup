@@ -6687,8 +6687,9 @@ finalize() {
     # This is especially important because ACFS config includes "dangerous mode"
     # aliases (e.g., `cc`) that can run commands without interactive approvals.
     log_detail "Installing DCG (Destructive Command Guard) PreToolUse hook"
-    try_step_eval "Installing DCG hook" \
-        "TARGET_USER='$TARGET_USER' TARGET_HOME='$TARGET_HOME' '$ACFS_HOME/scripts/services-setup.sh' --install-claude-guard --yes" || \
+    try_step "Installing DCG hook" \
+        env "TARGET_USER=$TARGET_USER" "TARGET_HOME=$TARGET_HOME" \
+        "$ACFS_HOME/scripts/services-setup.sh" --install-claude-guard --yes || \
         log_warn "DCG hook installation failed (optional)"
 
     # Configure workspace trust for coding agents (fixes #159)

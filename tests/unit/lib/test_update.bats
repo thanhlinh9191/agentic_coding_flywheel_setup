@@ -6829,6 +6829,27 @@ EOF
     assert_failure
 }
 
+@test "install.sh: DCG hook installer passes target paths as argv/env data" {
+    local installer="$PROJECT_ROOT/install.sh"
+    local try_step_line="try_step \"Installing DCG hook\" \\"
+    local env_line="env \"TARGET_USER=\$TARGET_USER\" \"TARGET_HOME=\$TARGET_HOME\" \\"
+
+    run grep -F "$try_step_line" "$installer"
+    assert_success
+
+    run grep -F "$env_line" "$installer"
+    assert_success
+
+    run grep -F '"$ACFS_HOME/scripts/services-setup.sh" --install-claude-guard --yes' "$installer"
+    assert_success
+
+    run grep -F 'try_step_eval "Installing DCG hook"' "$installer"
+    assert_failure
+
+    run grep -F "TARGET_USER='\$TARGET_USER' TARGET_HOME='\$TARGET_HOME'" "$installer"
+    assert_failure
+}
+
 @test "install.sh: resolves target user and shell via trusted helpers" {
     local installer="$PROJECT_ROOT/install.sh"
 
