@@ -397,6 +397,32 @@ _show_rate_limit_wait() {
 # Fetch with Rate Limit Backoff
 # ============================================================
 
+_github_curl_args_for_status_capture() {
+    local arg=""
+    local short_flags=""
+    local filtered_flags=""
+
+    for arg in "$@"; do
+        case "$arg" in
+            -f|--fail|--fail-with-body)
+                continue
+                ;;
+            -[!-]*)
+                short_flags="${arg#-}"
+                if [[ "$short_flags" == *f* ]]; then
+                    filtered_flags="${short_flags//f/}"
+                    [[ -n "$filtered_flags" ]] && printf '%s\n' "-$filtered_flags"
+                    continue
+                fi
+                printf '%s\n' "$arg"
+                ;;
+            *)
+                printf '%s\n' "$arg"
+                ;;
+        esac
+    done
+}
+
 # Fetch URL with exponential backoff for rate limits
 #
 # Arguments:
@@ -429,11 +455,12 @@ github_fetch_with_backoff() {
     if declare -p ACFS_CURL_BASE_ARGS &>/dev/null && (( ${#ACFS_CURL_BASE_ARGS[@]} > 0 )); then
         curl_base_args=("${ACFS_CURL_BASE_ARGS[@]}")
     else
-        curl_base_args=(--connect-timeout 30 --max-time 300 -fsSL)
+        curl_base_args=(--connect-timeout 30 --max-time 300 -sSL)
         if command -v curl &>/dev/null && curl --help all 2>/dev/null | grep -q -- '--proto'; then
-            curl_base_args=(--proto '=https' --proto-redir '=https' --connect-timeout 30 --max-time 300 -fsSL)
+            curl_base_args=(--proto '=https' --proto-redir '=https' --connect-timeout 30 --max-time 300 -sSL)
         fi
     fi
+    mapfile -t curl_base_args < <(_github_curl_args_for_status_capture "${curl_base_args[@]}")
 
     # Prepare auth header if token available
     local auth_header=()

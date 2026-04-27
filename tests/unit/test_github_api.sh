@@ -300,6 +300,103 @@ test_fetch_valid_url_without_base_args() {
     return "$status"
 }
 
+test_fetch_with_backoff_strips_fail_flag_for_rate_limit_status() {
+    # Regression test: github_fetch_with_backoff must inspect 403/429 bodies.
+    # Curl's -f/--fail turns those HTTP responses into generic failures before
+    # the rate-limit classifier can see the response headers and body.
+    local temp_dir tmp_file status=1
+    local old_initial="${GITHUB_BACKOFF_INITIAL:-}"
+    local old_max="${GITHUB_BACKOFF_MAX:-}"
+    local had_base_args=false
+    local -a saved_base_args=()
+
+    temp_dir=$(mktemp -d)
+    tmp_file=$(mktemp)
+
+    cat > "$temp_dir/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+log_file="$TEST_GITHUB_CURL_DIR/argv.log"
+calls_file="$TEST_GITHUB_CURL_DIR/calls"
+
+for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$log_file"
+    case "$arg" in
+        -f|--fail|--fail-with-body|-[!-]*f*)
+            printf 'unexpected fail flag: %s\n' "$arg" >&2
+            exit 97
+            ;;
+    esac
+done
+
+headers=""
+output=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -D)
+            headers="$2"
+            shift 2
+            ;;
+        -o)
+            output="$2"
+            shift 2
+            ;;
+        -w)
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+calls=0
+[[ -f "$calls_file" ]] && calls="$(<"$calls_file")"
+calls=$((calls + 1))
+printf '%s\n' "$calls" > "$calls_file"
+
+if [[ "$calls" -eq 1 ]]; then
+    printf 'HTTP/2 403\r\nx-ratelimit-remaining: 0\r\n\r\n' > "$headers"
+    printf 'API rate limit exceeded\n' > "$output"
+    printf '403'
+    exit 0
+fi
+
+printf 'HTTP/2 200\r\nx-ratelimit-remaining: 1\r\n\r\n' > "$headers"
+printf 'ok\n' > "$output"
+printf '200'
+EOF
+    chmod +x "$temp_dir/curl"
+
+    if declare -p ACFS_CURL_BASE_ARGS &>/dev/null; then
+        had_base_args=true
+        saved_base_args=("${ACFS_CURL_BASE_ARGS[@]}")
+    fi
+    ACFS_CURL_BASE_ARGS=(--proto '=https' --proto-redir '=https' --connect-timeout 30 --max-time 300 -fsSL)
+    GITHUB_BACKOFF_INITIAL=0
+    GITHUB_BACKOFF_MAX=1
+
+    if TEST_GITHUB_CURL_DIR="$temp_dir" PATH="$temp_dir:/usr/bin:/bin" GITHUB_MAX_RETRIES=2 \
+        github_fetch_with_backoff "https://example.invalid/file" "$tmp_file" "rate-limit-status-test" >/dev/null 2>/dev/null; then
+        if [[ "$(cat "$tmp_file" 2>/dev/null)" == "ok" ]] && [[ "$(cat "$temp_dir/calls" 2>/dev/null)" == "2" ]]; then
+            status=0
+        fi
+    fi
+
+    if [[ "$had_base_args" == "true" ]]; then
+        ACFS_CURL_BASE_ARGS=("${saved_base_args[@]}")
+    else
+        unset ACFS_CURL_BASE_ARGS 2>/dev/null || true
+    fi
+    GITHUB_BACKOFF_INITIAL="$old_initial"
+    GITHUB_BACKOFF_MAX="$old_max"
+
+    rm -rf "$temp_dir"
+    rm -f "$tmp_file"
+    return "$status"
+}
+
 test_fetch_with_backoff_clears_return_trap() {
     # Regression test: library functions are sourced into long-lived shells, so
     # temp-file cleanup must not leave a stale RETURN trap behind.
@@ -531,6 +628,7 @@ main() {
 
     echo ""
     echo "--- Cleanup Discipline ---"
+    run_test "Fetch backoff strips curl fail flag for rate limits" test_fetch_with_backoff_strips_fail_flag_for_rate_limit_status
     run_test "Fetch backoff clears RETURN trap" test_fetch_with_backoff_clears_return_trap
     run_test "Fetch backoff preserves caller RETURN trap" test_fetch_with_backoff_preserves_caller_return_trap
     run_test "Fetch backoff reports output write failure" test_fetch_with_backoff_reports_output_write_failure
