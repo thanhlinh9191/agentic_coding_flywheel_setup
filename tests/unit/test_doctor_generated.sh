@@ -553,10 +553,24 @@ test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
     fi
 
     # Extract the encoded command for base.filesystem.3 from the
-    # MANIFEST_CHECKS array. Each entry is tab-separated:
-    # <id>\t<desc>\t<cmd>\t<required|optional>\t<root|target_user>
+    # MANIFEST_CHECKS array. The bash array entries contain literal
+    # \" sequences (escaped quotes), so awk -v RS='"' would split
+    # mid-entry and silently truncate the command to a comment-only
+    # prefix — the test would then "pass" by running an empty
+    # script. Source the file in a clean subshell instead and pull
+    # the entry directly from the array.
     local entry=""
-    entry="$(awk -v RS='"' '/^base\.filesystem\.3\t/{print; exit}' "$checks_file" 2>/dev/null || true)"
+    entry="$(bash -c "
+        set -euo pipefail
+        source ${checks_file@Q}
+        for e in \"\${MANIFEST_CHECKS[@]}\"; do
+            if [[ \"\$e\" == 'base.filesystem.3'\$'\\t'* ]]; then
+                printf '%s' \"\$e\"
+                exit 0
+            fi
+        done
+        exit 1
+    ")"
     if [[ -z "$entry" ]]; then
         harness_fail "could not extract base.filesystem.3 entry from $checks_file"
         return
@@ -571,6 +585,15 @@ test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
     local encoded_cmd="${rest%$'\t'required$'\t'root}"
     local cmd=""
     cmd="$(printf '%b' "$encoded_cmd")"
+
+    # Sanity: the decoded body must contain the actual verify
+    # logic (test -d "$target_home/.acfs"). If it doesn't, the
+    # extraction broke and we'd false-pass on a stub.
+    if [[ "$cmd" != *'test -d "$target_home/.acfs"'* ]]; then
+        harness_fail "decoded base.filesystem.3 body is missing the verify line — extraction is broken" \
+            "first 400 chars: ${cmd:0:400}"
+        return
+    fi
 
     # Run the command via `bash -o pipefail -c`, exactly as
     # _doctor_run_manifest_check does for run_as=root, but in a
@@ -610,6 +633,22 @@ test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
         harness_pass "base.filesystem.3 falls back to getent / HOME when TARGET_HOME is unset"
     else
         harness_fail "base.filesystem.3 fallback path failed (rc=$rc)" "$output"
+    fi
+
+    # Negative test: with no TARGET_HOME, no matching USER, and
+    # no HOME, the verify must FAIL CLOSED — the prior
+    # implementation could silently succeed in some environments.
+    # Run without `|| true` so $? captures bash -c's actual exit.
+    output="$(env -i \
+        PATH="/usr/local/bin:/usr/bin:/bin" \
+        TARGET_USER="nonexistent_user_that_should_not_exist_anywhere_xyz" \
+        bash -o pipefail -c "$cmd" 2>&1)"
+    rc=$?
+    if [[ $rc -ne 0 ]] && [[ "$output" == *"Unable to resolve TARGET_HOME"* ]]; then
+        harness_pass "base.filesystem.3 fails closed with explanatory error when nothing resolves"
+    else
+        harness_fail "base.filesystem.3 should fail closed with diagnostic when no resolution path works" \
+            "rc=$rc output: $output"
     fi
 
     rm -rf "$temp_root"
