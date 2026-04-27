@@ -1,5 +1,4 @@
 import { chromium } from 'playwright';
-import { writeFileSync } from 'fs';
 
 const SCREENSHOT_DIR = './research_screenshots';
 
