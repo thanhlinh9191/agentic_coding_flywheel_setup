@@ -6856,6 +6856,33 @@ _smoke_run_as_target() {
     run_as_target env "PATH=$smoke_path" bash -c "set -euo pipefail; $cmd"
 }
 
+acfs_smoke_install_fix_command() {
+    local install_url="https://agent-flywheel.com/install"
+    local install_url_q=""
+    local flags=""
+    local module_id=""
+    local -a fix_args=(--yes --force-reinstall)
+
+    for module_id in "$@"; do
+        [[ -n "$module_id" ]] || continue
+        fix_args+=(--only "$module_id")
+    done
+
+    if [[ -n "${ACFS_COMMIT_SHA_FULL:-}" ]]; then
+        install_url="https://raw.githubusercontent.com/${ACFS_REPO_OWNER}/${ACFS_REPO_NAME}/${ACFS_COMMIT_SHA_FULL}/install.sh"
+        fix_args+=(--ref "$ACFS_COMMIT_SHA_FULL")
+    elif [[ -n "${ACFS_REF_INPUT:-}" && "${ACFS_REF_INPUT}" != "main" ]]; then
+        install_url="https://raw.githubusercontent.com/${ACFS_REPO_OWNER}/${ACFS_REPO_NAME}/${ACFS_REF_INPUT}/install.sh"
+        fix_args+=(--ref "$ACFS_REF_INPUT")
+    fi
+
+    printf -v install_url_q '%q' "$install_url"
+    printf -v flags '%q ' "${fix_args[@]}"
+    flags="${flags% }"
+
+    printf 'curl -fsSL %s | bash -s -- %s\n' "$install_url_q" "$flags"
+}
+
 run_smoke_test() {
     local critical_total=8
     local critical_passed=0
@@ -6947,7 +6974,7 @@ run_smoke_test() {
         ((critical_passed += 1))
     else
         echo "✖ Languages: missing ${missing_lang[*]}" >&2
-        echo "    Fix: curl -fsSL https://agent-flywheel.com/install | bash -s -- --yes --only-phase 5" >&2
+        echo "    Fix: $(acfs_smoke_install_fix_command lang.bun lang.uv lang.rust lang.go)" >&2
         ((critical_failed += 1))
     fi
 
@@ -6961,7 +6988,7 @@ run_smoke_test() {
         ((critical_passed += 1))
     else
         echo "✖ Agents: missing ${missing_agents[*]}" >&2
-        echo "    Fix: curl -fsSL https://agent-flywheel.com/install | bash -s -- --yes --only-phase 6" >&2
+        echo "    Fix: $(acfs_smoke_install_fix_command agents.claude agents.codex agents.gemini)" >&2
         ((critical_failed += 1))
     fi
 
@@ -6971,7 +6998,7 @@ run_smoke_test() {
         ((critical_passed += 1))
     else
         echo "✖ NTM: not working" >&2
-        echo "    Fix: curl -fsSL https://agent-flywheel.com/install | bash -s -- --yes --only-phase 8" >&2
+        echo "    Fix: $(acfs_smoke_install_fix_command stack.ntm)" >&2
         ((critical_failed += 1))
     fi
 
@@ -6981,7 +7008,7 @@ run_smoke_test() {
         ((critical_passed += 1))
     else
         echo "✖ Onboard: missing" >&2
-        echo "    Fix: curl -fsSL https://agent-flywheel.com/install | bash -s -- --yes --only-phase 9" >&2
+        echo "    Fix: $(acfs_smoke_install_fix_command acfs.onboard)" >&2
         ((critical_failed += 1))
     fi
 
@@ -7008,7 +7035,7 @@ run_smoke_test() {
         echo "    Fix: rerun ACFS update/install to rewrite agent-mail.service, then systemctl --user enable --now agent-mail.service" >&2
         ((warnings += 1))
     else
-        echo "⚠️ Agent Mail: not installed (re-run: curl -fsSL https://agent-flywheel.com/install | bash -s -- --yes --only-phase 8)" >&2
+        echo "⚠️ Agent Mail: not installed (re-run: $(acfs_smoke_install_fix_command stack.mcp_agent_mail))" >&2
         ((warnings += 1))
     fi
 

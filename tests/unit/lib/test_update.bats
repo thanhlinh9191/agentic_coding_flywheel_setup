@@ -7885,6 +7885,67 @@ SECURITY
     assert_success
 }
 
+@test "installer recovery suggestions use stable module selectors" {
+    local installer="$PROJECT_ROOT/install.sh"
+    local agents_lib="$PROJECT_ROOT/scripts/lib/agents.sh"
+    local smoke_lib="$PROJECT_ROOT/scripts/lib/smoke_test.sh"
+
+    run grep -E '(Fix:|re-run:|Re-run:|Install bun first:).*--only-phase' "$installer" "$agents_lib" "$smoke_lib"
+    assert_failure
+
+    run grep -F 'acfs_smoke_install_fix_command lang.bun lang.uv lang.rust lang.go' "$installer"
+    assert_success
+
+    run grep -F 'acfs_smoke_install_fix_command agents.claude agents.codex agents.gemini' "$installer"
+    assert_success
+
+    run grep -F 'acfs_smoke_install_fix_command stack.ntm' "$installer"
+    assert_success
+
+    run grep -F 'acfs_smoke_install_fix_command acfs.onboard' "$installer"
+    assert_success
+
+    run grep -F 'acfs_smoke_install_fix_command stack.mcp_agent_mail' "$installer"
+    assert_success
+
+    run grep -F -- '--force-reinstall --only stack.ntm' "$smoke_lib"
+    assert_success
+
+    run grep -F -- '--force-reinstall --only lang.bun' "$agents_lib"
+    assert_success
+}
+
+@test "install.sh: smoke fix command preserves pinned ref" {
+    local installer="$PROJECT_ROOT/install.sh"
+
+    # shellcheck disable=SC1090
+    eval "$(sed -n '/^acfs_smoke_install_fix_command()/,/^}$/p' "$installer")"
+
+    ACFS_REPO_OWNER="Dicklesworthstone"
+    ACFS_REPO_NAME="agentic_coding_flywheel_setup"
+    ACFS_COMMIT_SHA_FULL="abc1234"
+    ACFS_REF_INPUT="feature/test"
+
+    run acfs_smoke_install_fix_command "stack.ntm"
+    assert_success
+    assert_output --partial "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/abc1234/install.sh"
+    assert_output --partial "bash -s -- --yes --force-reinstall --only stack.ntm --ref abc1234"
+
+    unset ACFS_COMMIT_SHA_FULL
+    ACFS_REF_INPUT="feature/test"
+
+    run acfs_smoke_install_fix_command "stack.ntm"
+    assert_success
+    assert_output --partial "https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/feature/test/install.sh"
+    assert_output --partial "bash -s -- --yes --force-reinstall --only stack.ntm --ref feature/test"
+
+    ACFS_REF_INPUT="main"
+    run acfs_smoke_install_fix_command "stack.ntm"
+    assert_success
+    assert_output --partial "https://agent-flywheel.com/install"
+    refute_output --partial "--ref"
+}
+
 @test "doctor.sh: state mode is validated before sudo policy and fix suggestions" {
     local doctor_lib="$PROJECT_ROOT/scripts/lib/doctor.sh"
 
