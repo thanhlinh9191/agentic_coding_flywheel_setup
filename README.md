@@ -3094,51 +3094,55 @@ The generator produces `manifest_index.sh`, a comprehensive bash metadata file t
 **Associative Arrays:**
 ```bash
 # Module metadata lookup
-declare -A ACFS_MODULE_DESCRIPTION
-ACFS_MODULE_DESCRIPTION["lang.bun"]="Bun JavaScript/TypeScript runtime..."
-ACFS_MODULE_DESCRIPTION["agents.claude"]="Claude Code CLI agent..."
+declare -gA ACFS_MODULE_DESC
+ACFS_MODULE_DESC["lang.bun"]="Bun JavaScript/TypeScript runtime"
+ACFS_MODULE_DESC["agents.claude"]="Claude Code CLI agent"
 
 # Phase mapping (determines install order)
-declare -A ACFS_MODULE_PHASE
-ACFS_MODULE_PHASE["base.apt"]="1"
-ACFS_MODULE_PHASE["lang.bun"]="3"
-ACFS_MODULE_PHASE["agents.claude"]="5"
+declare -gA ACFS_MODULE_PHASE
+ACFS_MODULE_PHASE["base.system"]="1"
+ACFS_MODULE_PHASE["lang.bun"]="6"
+ACFS_MODULE_PHASE["agents.claude"]="7"
 
-# Dependency relationships (space-separated)
-declare -A ACFS_MODULE_DEPENDENCIES
-ACFS_MODULE_DEPENDENCIES["agents.claude"]="lang.bun base.system"
+# Dependency relationships (comma-separated)
+declare -gA ACFS_MODULE_DEPS
+ACFS_MODULE_DEPS["agents.codex"]="lang.bun"
+ACFS_MODULE_DEPS["stack.mcp_agent_mail"]="lang.bun,lang.uv"
 
 # Generated function name mapping
-declare -A ACFS_MODULE_FUNCTION
-ACFS_MODULE_FUNCTION["lang.bun"]="install_lang_bun"
+declare -gA ACFS_MODULE_FUNC
+ACFS_MODULE_FUNC["lang.bun"]="install_lang_bun"
 
 # Category grouping
-declare -A ACFS_MODULE_CATEGORY
+declare -gA ACFS_MODULE_CATEGORY
 ACFS_MODULE_CATEGORY["lang.bun"]="lang"
 
 # Default inclusion in install
-declare -A ACFS_MODULE_DEFAULT
-ACFS_MODULE_DEFAULT["lang.bun"]="true"
-ACFS_MODULE_DEFAULT["db.postgres18"]="true"
+declare -gA ACFS_MODULE_DEFAULT
+ACFS_MODULE_DEFAULT["lang.bun"]="1"
+ACFS_MODULE_DEFAULT["db.postgres18"]="1"
 ```
 
-**Runtime Query Functions:**
+**Runtime Access Pattern:**
 ```bash
-# Get all modules in a category
-get_modules_by_category "agents"  # Returns: agents.claude agents.codex agents.gemini
+# Iterate modules in deterministic install order
+for module in "${ACFS_MODULES_IN_ORDER[@]}"; do
+  [[ "${ACFS_MODULE_CATEGORY[$module]}" == "agents" ]] || continue
+  printf '%s\n' "$module"
+done
 
 # Check if module is default-installed
-is_default_module "tools.vault"   # Returns: true
+[[ "${ACFS_MODULE_DEFAULT[tools.vault]:-1}" == "1" ]]
 
 # Get installation phase
-get_module_phase "stack.ntm"      # Returns: 6
+printf '%s\n' "${ACFS_MODULE_PHASE[stack.ntm]}"  # 9
 ```
 
 **Use Cases:**
 - `acfs doctor` queries module metadata for health checks
 - `install.sh --list-modules` displays available modules
 - `--skip <module>` validates module existence before skipping
-- `--only-phase <n>` uses phase mapping for selective installs
+- `--only-phase <n|name>` uses phase mapping for selective installs
 
 The manifest index bridges the TypeScript generator with bash runtime, enabling sophisticated module selection logic while keeping the bash scripts simple.
 
@@ -3963,8 +3967,8 @@ Doctor checks are generated directly from the manifest, so they verify the exact
 
 2. **Re-run an entire phase** (for multiple failures in one category):
    ```bash
-   acfs install --only-phase 4   # Re-run Phase 4: Tools
-   acfs install --only-phase 8   # Re-run Phase 8: Stack
+   acfs install --only-phase cli     # Re-run CLI tools
+   acfs install --only-phase stack   # Re-run stack tools
    ```
 
 3. **Run auto-fix mode** (applies safe, deterministic fixes):
