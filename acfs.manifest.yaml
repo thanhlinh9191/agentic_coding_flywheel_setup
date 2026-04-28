@@ -146,31 +146,27 @@ modules:
           if [[ -n "$explicit_target_home" ]]; then
             explicit_target_home="${explicit_target_home%/}"
           fi
-          target_home="$explicit_target_home"
-          if [[ -z "$target_home" ]]; then
-            if [[ "${TARGET_USER:-ubuntu}" == "root" ]]; then
-              target_home="/root"
+          target_home=""
+          if [[ "${TARGET_USER:-ubuntu}" == "root" ]]; then
+            target_home="/root"
+          else
+            _acfs_passwd_entry="$(acfs_generated_getent_passwd_entry "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
+            if [[ -n "$_acfs_passwd_entry" ]]; then
+              target_home="$(acfs_generated_passwd_home_from_entry "$_acfs_passwd_entry" 2>/dev/null || true)"
             else
-              _acfs_passwd_entry="$(acfs_generated_getent_passwd_entry "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
-              if [[ -n "$_acfs_passwd_entry" ]]; then
-                target_home="$(acfs_generated_passwd_home_from_entry "$_acfs_passwd_entry" 2>/dev/null || true)"
-              else
-                current_user="$(acfs_generated_resolve_current_user 2>/dev/null || true)"
-                current_home="${HOME:-}"
-                if [[ -n "$current_home" ]]; then
-                  current_home="${current_home%/}"
-                fi
-                if [[ "$current_user" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "$current_home" ]] && [[ "$current_home" == /* ]] && [[ "$current_home" != "/" ]] && { [[ -z "$explicit_target_home" ]] || [[ "$current_home" == "$explicit_target_home" ]]; }; then
-                  target_home="$current_home"
-                fi
-                unset current_user current_home
+              current_user="$(acfs_generated_resolve_current_user 2>/dev/null || true)"
+              current_home="${HOME:-}"
+              if [[ -n "$current_home" ]]; then
+                current_home="${current_home%/}"
               fi
-              if [[ -n "$target_home" ]]; then
-                target_home="${target_home%/}"
+              if [[ -n "$current_user" ]] && [[ "$current_user" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "$current_home" ]] && [[ "$current_home" == /* ]] && [[ "$current_home" != "/" ]] && { [[ -z "$explicit_target_home" ]] || [[ "$current_home" == "$explicit_target_home" ]]; }; then
+                target_home="$current_home"
               fi
-              unset _acfs_passwd_entry
+              unset current_user current_home
             fi
+            unset _acfs_passwd_entry
           fi
+          unset explicit_target_home
           if [[ -z "$target_home" ]] || [[ "$target_home" == "/" ]] || [[ "$target_home" != /* ]]; then
             echo "ERROR: Unable to resolve TARGET_HOME for '${TARGET_USER:-ubuntu}'; export TARGET_HOME explicitly (got: '${target_home:-<empty>}')" >&2
             exit 1

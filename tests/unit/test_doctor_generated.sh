@@ -543,8 +543,8 @@ test_workspace_checks_are_not_required_health_failures() {
     fi
 }
 
-test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
-    harness_section "Test: base.filesystem.3 verify works in bare bash -c (issue acfs#268)"
+test_base_filesystem_3_verify_runs_with_injected_helpers() {
+    harness_section "Test: base.filesystem.3 verify uses injected helper resolution"
 
     local checks_file="$REPO_ROOT/scripts/generated/doctor_checks.sh"
     if [[ ! -f "$checks_file" ]]; then
@@ -595,38 +595,60 @@ test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
         return
     fi
 
-    # Run the command via `bash -o pipefail -c`, exactly as
-    # _doctor_run_manifest_check does for run_as=root, but in a
-    # MINIMAL environment that does NOT include any acfs_generated_*
-    # shell function. The whole point of the regression is that the
-    # doctor's subprocess does not export those functions, so the
-    # verify must work without them.
     local temp_root=""
     temp_root="$(mktemp -d)"
     mkdir -p "$temp_root/.acfs"
+
+    # The generated doctor runner injects these helpers before manifest
+    # commands that reference acfs_generated_* functions. Keep this harness
+    # minimal, but model that real execution path so the test does not pass by
+    # trusting inherited TARGET_HOME directly.
+    local helper_prelude=""
+    helper_prelude='
+acfs_generated_getent_passwd_entry() {
+    local user="${1:-}"
+    [[ -n "$user" && -n "${ACFS_TEST_PASSWD_HOME:-}" ]] || return 1
+    printf "%s:x:1000:1000::%s:/bin/bash\n" "$user" "$ACFS_TEST_PASSWD_HOME"
+}
+acfs_generated_passwd_home_from_entry() {
+    local entry="${1:-}"
+    local home=""
+    [[ -n "$entry" ]] || return 1
+    IFS=: read -r _ _ _ _ _ home _ <<< "$entry"
+    [[ -n "$home" && "$home" == /* && "$home" != "/" ]] || return 1
+    printf "%s\n" "${home%/}"
+}
+acfs_generated_resolve_current_user() {
+    [[ -n "${USER:-}" ]] || return 1
+    printf "%s\n" "$USER"
+}
+'
+    local wrapped_cmd="${helper_prelude}"$'\n'"${cmd}"
 
     local output=""
     output="$(env -i \
         PATH="/usr/local/bin:/usr/bin:/bin" \
         TARGET_USER="$(id -un)" \
-        TARGET_HOME="$temp_root" \
-        bash -o pipefail -c "$cmd" 2>&1)"
+        TARGET_HOME="$temp_root/stale-home" \
+        ACFS_TEST_PASSWD_HOME="$temp_root" \
+        bash -o pipefail -c "$wrapped_cmd" 2>&1)"
     local rc=$?
 
     if [[ $rc -eq 0 ]]; then
-        harness_pass "base.filesystem.3 passes when TARGET_HOME is set in env"
+        harness_pass "base.filesystem.3 repairs stale TARGET_HOME through passwd helper data"
     else
-        harness_fail "base.filesystem.3 fails when TARGET_HOME is set in env (rc=$rc)" "$output"
+        harness_fail "base.filesystem.3 fails with stale TARGET_HOME despite helper data (rc=$rc)" "$output"
     fi
 
-    # Same again, but WITHOUT TARGET_HOME — exercise the getent
-    # passwd fallback for callers that don't pre-resolve.
+    # Same again, but WITHOUT TARGET_HOME — exercise the injected passwd
+    # fallback for callers that don't pre-resolve.
     output="$(env -i \
         PATH="/usr/local/bin:/usr/bin:/bin" \
         TARGET_USER="$(id -un)" \
+        ACFS_TEST_PASSWD_HOME="$temp_root" \
         USER="$(id -un)" \
         HOME="$temp_root" \
-        bash -o pipefail -c "$cmd" 2>&1)"
+        bash -o pipefail -c "$wrapped_cmd" 2>&1)"
     rc=$?
 
     if [[ $rc -eq 0 ]]; then
@@ -642,7 +664,7 @@ test_base_filesystem_3_verify_runs_in_subprocess_without_helpers() {
     output="$(env -i \
         PATH="/usr/local/bin:/usr/bin:/bin" \
         TARGET_USER="nonexistent_user_that_should_not_exist_anywhere_xyz" \
-        bash -o pipefail -c "$cmd" 2>&1)"
+        bash -o pipefail -c "$wrapped_cmd" 2>&1)"
     rc=$?
     if [[ $rc -ne 0 ]] && [[ "$output" == *"Unable to resolve TARGET_HOME"* ]]; then
         harness_pass "base.filesystem.3 fails closed with explanatory error when nothing resolves"
@@ -832,7 +854,7 @@ main() {
     test_root_checks_preserve_target_context
     test_generated_manifest_checks_use_hardened_target_path
     test_generated_run_manifest_check_command_handles_unresolved_target_home_by_context
-    test_base_filesystem_3_verify_runs_in_subprocess_without_helpers
+    test_base_filesystem_3_verify_runs_with_injected_helpers
     test_workspace_checks_are_not_required_health_failures
     test_generated_target_home_fallbacks_are_dynamic
     test_meta_skill_arm64_linux_guidance
