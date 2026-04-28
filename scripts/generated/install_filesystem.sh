@@ -472,30 +472,138 @@ INSTALL_BASE_FILESYSTEM
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: verify: if [[ -z \"\$target_home\" ]]; then (root)"
+        log_info "dry-run: verify: if [[ -n \"\$explicit_target_home\" ]]; then (root)"
     else
         if ! run_as_root_shell <<'INSTALL_BASE_FILESYSTEM'
-# Resolve TARGET_HOME in a way that works in any bash -c
-# subprocess. The install block above uses generated helper
-# shell functions via inlined heredoc, but the doctor's
-# subprocess invocation does not export those, so the
-# verify must stand on its own. Prefer the parent shell's
-# already-resolved $TARGET_HOME (set by ACFS doctor and
-# the installer); fall back to `getent passwd` (a system
-# command, available wherever this manifest is supported)
-# when running standalone. See acfs#268.
-target_home="${TARGET_HOME:-}"
-target_home="${target_home%/}"
+# Generated helper functions used by this child shell.
+acfs_generated_system_binary_path() {
+    local name="${1:-}"
+    local candidate=""
+
+    [[ -n "$name" ]] || return 1
+
+    for candidate in \
+        "/usr/local/bin/$name" \
+        "/usr/local/sbin/$name" \
+        "/usr/bin/$name" \
+        "/bin/$name" \
+        "/usr/sbin/$name" \
+        "/sbin/$name"
+    do
+        [[ -x "$candidate" ]] || continue
+        printf '%s\n' "$candidate"
+        return 0
+    done
+
+    return 1
+}
+
+acfs_generated_resolve_current_user() {
+    local current_user=""
+    local id_bin=""
+    local whoami_bin=""
+
+    id_bin="$(acfs_generated_system_binary_path id 2>/dev/null || true)"
+    if [[ -n "$id_bin" ]]; then
+        current_user="$("$id_bin" -un 2>/dev/null || true)"
+    fi
+
+    if [[ -z "$current_user" ]]; then
+        whoami_bin="$(acfs_generated_system_binary_path whoami 2>/dev/null || true)"
+        if [[ -n "$whoami_bin" ]]; then
+            current_user="$("$whoami_bin" 2>/dev/null || true)"
+        fi
+    fi
+
+    [[ -n "$current_user" ]] || return 1
+    printf '%s\n' "$current_user"
+}
+
+acfs_generated_getent_passwd_entry() {
+    local user="${1-}"
+    local getent_bin=""
+    local passwd_entry=""
+    local passwd_line=""
+    local printed_any=false
+
+    getent_bin="$(acfs_generated_system_binary_path getent 2>/dev/null || true)"
+    if [[ -z "$user" ]]; then
+        if [[ -n "$getent_bin" ]]; then
+            while IFS= read -r passwd_line; do
+                printf '%s\n' "$passwd_line"
+                printed_any=true
+            done < <("$getent_bin" passwd 2>/dev/null || true)
+            if [[ "$printed_any" == true ]]; then
+                return 0
+            fi
+        fi
+
+        [[ -r /etc/passwd ]] || return 1
+        while IFS= read -r passwd_line; do
+            printf '%s\n' "$passwd_line"
+        done < /etc/passwd
+        return 0
+    fi
+
+    if [[ -n "$getent_bin" ]]; then
+        passwd_entry="$("$getent_bin" passwd "$user" 2>/dev/null || true)"
+    fi
+
+    if [[ -z "$passwd_entry" ]] && [[ -r /etc/passwd ]]; then
+        while IFS= read -r passwd_line; do
+            [[ "${passwd_line%%:*}" == "$user" ]] || continue
+            passwd_entry="$passwd_line"
+            break
+        done < /etc/passwd
+    fi
+
+    [[ -n "$passwd_entry" ]] || return 1
+    printf '%s\n' "$passwd_entry"
+}
+
+acfs_generated_passwd_home_from_entry() {
+    local passwd_entry="${1:-}"
+    local passwd_home=""
+
+    [[ -n "$passwd_entry" ]] || return 1
+    IFS=: read -r _ _ _ _ _ passwd_home _ <<< "$passwd_entry"
+    if [[ -n "$passwd_home" ]] && [[ "$passwd_home" == /* ]] && [[ "$passwd_home" != "/" ]]; then
+        printf '%s\n' "${passwd_home%/}"
+        return 0
+    fi
+
+    return 1
+}
+
+# Resolve TARGET_HOME using generated helper functions. Doctor
+# injects these helpers for manifest checks that reference
+# acfs_generated_* functions, so this stays consistent with
+# installer target-home resolution and avoids inherited HOME leaks.
+explicit_target_home="${TARGET_HOME:-}"
+if [[ -n "$explicit_target_home" ]]; then
+  explicit_target_home="${explicit_target_home%/}"
+fi
+target_home="$explicit_target_home"
 if [[ -z "$target_home" ]]; then
   if [[ "${TARGET_USER:-ubuntu}" == "root" ]]; then
     target_home="/root"
   else
-    _acfs_passwd_entry="$(getent passwd "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
+    _acfs_passwd_entry="$(acfs_generated_getent_passwd_entry "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
     if [[ -n "$_acfs_passwd_entry" ]]; then
-      target_home="$(printf '%s\n' "$_acfs_passwd_entry" | awk -F: 'NR==1 {print $6}')"
+      target_home="$(acfs_generated_passwd_home_from_entry "$_acfs_passwd_entry" 2>/dev/null || true)"
+    else
+      current_user="$(acfs_generated_resolve_current_user 2>/dev/null || true)"
+      current_home="${HOME:-}"
+      if [[ -n "$current_home" ]]; then
+        current_home="${current_home%/}"
+      fi
+      if [[ "$current_user" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "$current_home" ]] && [[ "$current_home" == /* ]] && [[ "$current_home" != "/" ]] && { [[ -z "$explicit_target_home" ]] || [[ "$current_home" == "$explicit_target_home" ]]; }; then
+        target_home="$current_home"
+      fi
+      unset current_user current_home
+    fi
+    if [[ -n "$target_home" ]]; then
       target_home="${target_home%/}"
-    elif [[ "${USER:-}" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "${HOME:-}" ]]; then
-      target_home="${HOME%/}"
     fi
     unset _acfs_passwd_entry
   fi
@@ -507,7 +615,7 @@ fi
 test -d "$target_home/.acfs"
 INSTALL_BASE_FILESYSTEM
         then
-            log_error "base.filesystem: verify failed: if [[ -z \"\$target_home\" ]]; then"
+            log_error "base.filesystem: verify failed: if [[ -n \"\$explicit_target_home\" ]]; then"
             return 1
         fi
     fi

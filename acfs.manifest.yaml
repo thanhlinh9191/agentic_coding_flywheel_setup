@@ -138,27 +138,35 @@ modules:
       - test -d /data/projects
       - test -f /data/projects/AGENTS.md
       - |
-          # Resolve TARGET_HOME in a way that works in any bash -c
-          # subprocess. The install block above uses generated helper
-          # shell functions via inlined heredoc, but the doctor's
-          # subprocess invocation does not export those, so the
-          # verify must stand on its own. Prefer the parent shell's
-          # already-resolved $TARGET_HOME (set by ACFS doctor and
-          # the installer); fall back to `getent passwd` (a system
-          # command, available wherever this manifest is supported)
-          # when running standalone. See acfs#268.
-          target_home="${TARGET_HOME:-}"
-          target_home="${target_home%/}"
+          # Resolve TARGET_HOME using generated helper functions. Doctor
+          # injects these helpers for manifest checks that reference
+          # acfs_generated_* functions, so this stays consistent with
+          # installer target-home resolution and avoids inherited HOME leaks.
+          explicit_target_home="${TARGET_HOME:-}"
+          if [[ -n "$explicit_target_home" ]]; then
+            explicit_target_home="${explicit_target_home%/}"
+          fi
+          target_home="$explicit_target_home"
           if [[ -z "$target_home" ]]; then
             if [[ "${TARGET_USER:-ubuntu}" == "root" ]]; then
               target_home="/root"
             else
-              _acfs_passwd_entry="$(getent passwd "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
+              _acfs_passwd_entry="$(acfs_generated_getent_passwd_entry "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
               if [[ -n "$_acfs_passwd_entry" ]]; then
-                target_home="$(printf '%s\n' "$_acfs_passwd_entry" | awk -F: 'NR==1 {print $6}')"
+                target_home="$(acfs_generated_passwd_home_from_entry "$_acfs_passwd_entry" 2>/dev/null || true)"
+              else
+                current_user="$(acfs_generated_resolve_current_user 2>/dev/null || true)"
+                current_home="${HOME:-}"
+                if [[ -n "$current_home" ]]; then
+                  current_home="${current_home%/}"
+                fi
+                if [[ "$current_user" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "$current_home" ]] && [[ "$current_home" == /* ]] && [[ "$current_home" != "/" ]] && { [[ -z "$explicit_target_home" ]] || [[ "$current_home" == "$explicit_target_home" ]]; }; then
+                  target_home="$current_home"
+                fi
+                unset current_user current_home
+              fi
+              if [[ -n "$target_home" ]]; then
                 target_home="${target_home%/}"
-              elif [[ "${USER:-}" == "${TARGET_USER:-ubuntu}" ]] && [[ -n "${HOME:-}" ]]; then
-                target_home="${HOME%/}"
               fi
               unset _acfs_passwd_entry
             fi
