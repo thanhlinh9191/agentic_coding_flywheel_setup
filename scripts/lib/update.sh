@@ -3374,18 +3374,36 @@ update_acfs_self() {
         return 0
     fi
 
-    # Only auto-update on main branch, but still refresh security files
-    if [[ "$current_branch" != "main" ]]; then
+    # Determine the canonical primary remote branch. The remote maintains
+    # both `main` and `master` as parallel refs with identical SHAs (legacy
+    # URL compatibility), so installs may be checked out on either one.
+    # Prefer origin/HEAD when resolvable as the source-of-truth ref.
+    local remote_branch="main"
+    local _origin_head_ref=""
+    _origin_head_ref=$(git -C "$ACFS_REPO_ROOT" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null) || true
+    if [[ -n "$_origin_head_ref" ]]; then
+        remote_branch="${_origin_head_ref##*/}"
+    fi
+
+    # Only auto-update when the local branch matches a primary remote branch
+    # (main or master — they're parallel and share SHAs). Still refresh
+    # security files in the skip path so checksums stay fresh.
+    if [[ "$current_branch" != "main" && "$current_branch" != "master" ]]; then
         log_item "skip" "ACFS self-update" "not on main branch (on: $current_branch)"
         if update_is_read_only_mode; then
             return 0
         fi
         # Still fetch and refresh security files so checksums stay fresh
-        if git -C "$ACFS_REPO_ROOT" fetch origin main --quiet 2>/dev/null; then
+        if git -C "$ACFS_REPO_ROOT" fetch origin "$remote_branch" --quiet 2>/dev/null; then
             _acfs_refresh_security_from_fetched_remote
         fi
         return 0
     fi
+
+    # Track the local branch to its matching remote branch so fetch/pull/reset
+    # operate on the right ref regardless of which name (main vs master) the
+    # install is checked out on.
+    remote_branch="$current_branch"
 
     local local_head=""
     local remote_head=""
@@ -3415,14 +3433,14 @@ update_acfs_self() {
 
     # Fetch latest from origin
     log_to_file "Fetching from origin..."
-    if ! git -C "$ACFS_REPO_ROOT" fetch origin main --quiet 2>/dev/null; then
+    if ! git -C "$ACFS_REPO_ROOT" fetch origin "$remote_branch" --quiet 2>/dev/null; then
         log_item "warn" "ACFS self-update" "git fetch failed (network issue?)"
         return 0
     fi
 
     # Compare local HEAD with remote
     local_head=$(git -C "$ACFS_REPO_ROOT" rev-parse HEAD 2>/dev/null) || true
-    remote_head=$(git -C "$ACFS_REPO_ROOT" rev-parse origin/main 2>/dev/null) || true
+    remote_head=$(git -C "$ACFS_REPO_ROOT" rev-parse "origin/$remote_branch" 2>/dev/null) || true
 
     if [[ -z "$local_head" ]] || [[ -z "$remote_head" ]]; then
         log_item "warn" "ACFS self-update" "failed to compare versions"
@@ -3437,7 +3455,7 @@ update_acfs_self() {
 
     # Show what's coming
     local commit_count
-    commit_count=$(git -C "$ACFS_REPO_ROOT" rev-list --count HEAD..origin/main 2>/dev/null) || commit_count="?"
+    commit_count=$(git -C "$ACFS_REPO_ROOT" rev-list --count "HEAD..origin/$remote_branch" 2>/dev/null) || commit_count="?"
     log_to_file "Found $commit_count new commit(s)"
 
     # Dry run mode
@@ -3472,7 +3490,7 @@ update_acfs_self() {
     if [[ "$self_update_completed" != "true" ]]; then
         # Pull updates
         log_to_file "Pulling updates..."
-        if ! git -C "$ACFS_REPO_ROOT" pull --ff-only origin main 2>/dev/null; then
+        if ! git -C "$ACFS_REPO_ROOT" pull --ff-only origin "$remote_branch" 2>/dev/null; then
             log_item "warn" "ACFS self-update" "ff-only pull failed (branch divergence?); refreshing security files"
             log_to_file "Self-update skipped: git pull --ff-only failed — refreshing security files only"
             _acfs_refresh_security_from_fetched_remote
