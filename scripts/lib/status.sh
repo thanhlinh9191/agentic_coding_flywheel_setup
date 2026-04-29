@@ -451,6 +451,11 @@ _status_resolve_explicit_target_home() {
 
     if [[ -n "$_STATUS_EXPLICIT_TARGET_USER_RAW" ]]; then
         _status_is_valid_username "$_STATUS_EXPLICIT_TARGET_USER_RAW" || return 1
+        target_home="$_STATUS_EXPLICIT_TARGET_HOME"
+        if [[ -n "$target_home" ]]; then
+            printf '%s\n' "${target_home%/}"
+            return 0
+        fi
         target_home="$(_status_existing_abs_home "$(_status_home_for_user "$_STATUS_EXPLICIT_TARGET_USER_RAW" 2>/dev/null || true)" 2>/dev/null || true)"
         [[ -n "$target_home" ]] || return 1
         printf '%s\n' "${target_home%/}"
