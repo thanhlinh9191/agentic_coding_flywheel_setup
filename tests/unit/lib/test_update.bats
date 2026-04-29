@@ -826,6 +826,12 @@ EOF
     run grep -F 'run_cmd_bun_with_retry "Vercel CLI" "$bun_bin" install -g --trust vercel@latest' "$update"
     assert_failure
 
+    run grep -F 'run_cmd_with_retry_status "Meta Skill" update_run_verified_installer ms --easy-mode' "$update"
+    assert_success
+
+    run grep -F 'run_cmd "Meta Skill" update_run_verified_installer ms --easy-mode' "$update"
+    assert_failure
+
     run grep -F 'run_cmd "Supabase CLI" update_run_in_target_context "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"' "$update"
     assert_success
 

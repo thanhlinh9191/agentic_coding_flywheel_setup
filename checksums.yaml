@@ -1,4 +1,4 @@
-# checksums.yaml - Auto-generated 2026-04-29T04:21:45-04:00
+# checksums.yaml - Auto-generated 2026-04-29T05:01:21-04:00
 # Run: ./scripts/lib/security.sh --update-checksums
 
 installers:
@@ -88,7 +88,7 @@ installers:
 
   ms:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/meta_skill/main/scripts/install.sh"
-    sha256: "12832a89cb5ba9102bd60672e09ac8e3c40c54b154723f1f8e4832aeafbcb7d0"
+    sha256: "3f871bce9a3c018f82453c40629c8fab9fae37765539be60b25869172b067972"
 
   ntm:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/ntm/main/install.sh"
