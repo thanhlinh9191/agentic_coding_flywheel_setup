@@ -830,7 +830,7 @@ get_version() {
                 version="unknown"
             fi
             ;;
-        ntm|ubs|bv|cass|cm|caam|slb|ru|dcg|apr|pt|xf|jfp|ms|br|rch|giil|csctf|srps|tru|rano|mdwb|s2p|brenner|fsfs|sbh|casr|dsr|asb)
+        ntm|ubs|bv|cass|cm|caam|slb|ru|dcg|apr|pt|xf|jfp|ms|br|rch|giil|csctf|srps|tru|rano|mdwb|s2p|brenner|fsfs|sbh|casr|dsr|asb|aadc|rust_proxy)
             tool_bin="$(update_binary_path "$tool" 2>/dev/null || true)"
             if [[ -n "$tool_bin" ]]; then
                 version=$("$tool_bin" --version 2>/dev/null | head -1 || echo "unknown")

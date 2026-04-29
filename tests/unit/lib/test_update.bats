@@ -52,6 +52,29 @@ EOF
     assert_output "1.75.0"
 }
 
+@test "get_version: detects source-built stack binaries in cargo bin" {
+    mkdir -p "$HOME/.cargo/bin"
+    cat > "$HOME/.cargo/bin/aadc" <<'EOF'
+#!/bin/bash
+echo "aadc 0.1.0"
+EOF
+    chmod +x "$HOME/.cargo/bin/aadc"
+
+    cat > "$HOME/.cargo/bin/rust_proxy" <<'EOF'
+#!/bin/bash
+echo "rust_proxy 0.1.0"
+EOF
+    chmod +x "$HOME/.cargo/bin/rust_proxy"
+
+    run get_version "aadc"
+    assert_success
+    assert_output "aadc 0.1.0"
+
+    run get_version "rust_proxy"
+    assert_success
+    assert_output "rust_proxy 0.1.0"
+}
+
 @test "get_version: prefers target runtime binaries when HOME differs" {
     local current_home
     local target_home
