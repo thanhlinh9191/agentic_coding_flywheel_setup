@@ -1,4 +1,4 @@
-# checksums.yaml - Auto-generated 2026-04-28T21:29:12-04:00
+# checksums.yaml - Auto-generated 2026-04-28T21:57:49-04:00
 # Run: ./scripts/lib/security.sh --update-checksums
 
 installers:
@@ -36,7 +36,7 @@ installers:
 
   casr:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/cross_agent_session_resumer/main/install.sh"
-    sha256: "85076fde0f8770ea86518e666776fa92ca6a99ff20acd8c4969c7dcccc1dc107"
+    sha256: "68b2fe7985bf64ada039db370fcf19b29e6dc63d4d8f563755de6b404d5a6323"
 
   cass:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_session_search/main/install.sh"
@@ -80,7 +80,7 @@ installers:
 
   mcp_agent_mail:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/main/install.sh"
-    sha256: "4475510f195e73cd81c8bc2b548978038cc184aa535dafbdac4b35f70c3ad654"
+    sha256: "e603d6e5fb5aca3a935efaabb946d3c86fae286e8a9e30ad0816b8cdf96490b1"
 
   mdwb:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/markdown_web_browser/main/install.sh"
@@ -120,7 +120,7 @@ installers:
 
   rch:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/remote_compilation_helper/main/install.sh"
-    sha256: "49a895ca1031bedcb8f3077b34c060e93c00d1201d87f92405f363bd320c7f94"
+    sha256: "0946d659c2877a34e7aecc7543ba861d8513f984f7be8b3df31099a86244f07c"
 
   ru:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/repo_updater/main/install.sh"
@@ -165,3 +165,4 @@ installers:
   zoxide:
     url: "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh"
     sha256: "0c25aed6cce9d56ee0596c9a5df8cbe99ffd0f7a7054de0262234dd268b61404"
+

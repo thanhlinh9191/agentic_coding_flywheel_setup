@@ -3337,8 +3337,8 @@ update_apt() {
     if [[ $upgrade_count -eq 0 ]]; then
         log_item "ok" "apt upgrade" "all packages up to date"
     else
-        log_to_file "Upgrading $upgrade_count packages..."
-        run_cmd_sudo "apt upgrade ($upgrade_count packages)" env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
+        log_to_file "Attempting apt upgrade for $upgrade_count upgradable package candidates..."
+        run_cmd_sudo "apt upgrade" env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold
     fi
 
     run_cmd_sudo "apt autoremove" env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get autoremove -y
