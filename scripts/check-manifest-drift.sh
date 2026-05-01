@@ -477,16 +477,18 @@ if ! command -v bun &>/dev/null; then
 fi
 
 # Refuse to fix if any tracked source file (anything contributing to
-# ACFS_INTERNAL_CHECKSUMS or to the generated installer scripts) has
-# uncommitted changes. Otherwise `bun run generate` would hash the dirty
-# working-tree contents and we'd push checksums that don't match what's
-# actually committed — exactly the failure mode that broke Pinned Ref Smoke
-# and the offline bootstrap installer tests on c55a89eb.
+# ACFS_INTERNAL_CHECKSUMS, verified-installer checksum validation, or the
+# generated installer scripts) has uncommitted changes. Otherwise
+# `bun run generate` would validate or hash dirty working-tree contents and
+# we'd push generated artifacts that don't match what's actually committed,
+# which is the failure mode that broke Pinned Ref Smoke and the offline
+# bootstrap installer tests on c55a89eb.
 DIRTY_SOURCES="$(cd "$REPO_ROOT" && git status --porcelain -- \
     scripts/lib \
     scripts/acfs-global \
     scripts/acfs-update \
     acfs.manifest.yaml \
+    checksums.yaml \
     packages/manifest 2>/dev/null \
     | grep -v '^[?][?]' || true)"
 if [[ -n "$DIRTY_SOURCES" ]]; then

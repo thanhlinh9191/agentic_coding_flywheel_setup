@@ -817,6 +817,13 @@ test_manifest_guard_scripts_cover_all_generated_outputs() {
         harness_fail "Manifest drift check can silently lose internal checksum coverage"
     fi
 
+    if grep -Fq 'verified-installer checksum validation' "$drift_file" \
+        && grep -Fq 'checksums.yaml' "$drift_file"; then
+        harness_pass "Manifest drift auto-fix refuses dirty checksum source"
+    else
+        harness_fail "Manifest drift auto-fix can validate against uncommitted checksums.yaml"
+    fi
+
     local drift_output=""
     local drift_status=0
     drift_output=$(PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
