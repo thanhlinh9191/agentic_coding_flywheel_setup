@@ -507,6 +507,12 @@ resolve_changelog_acfs_home() {
         fi
     fi
 
+    if [[ ! -f "$_CHANGELOG_SYSTEM_STATE_FILE" ]] && [[ -n "$_CHANGELOG_EXPLICIT_ACFS_HOME" ]] && [[ -f "$_CHANGELOG_EXPLICIT_ACFS_HOME/state.json" || -f "$_CHANGELOG_EXPLICIT_ACFS_HOME/VERSION" || -f "$_CHANGELOG_EXPLICIT_ACFS_HOME/CHANGELOG.md" ]]; then
+        _CHANGELOG_RESOLVED_ACFS_HOME="$_CHANGELOG_EXPLICIT_ACFS_HOME"
+        printf '%s\n' "$_CHANGELOG_RESOLVED_ACFS_HOME"
+        return 0
+    fi
+
     candidate="$(changelog_current_home_acfs_candidate 2>/dev/null || true)"
     if [[ -n "$candidate" ]]; then
         _CHANGELOG_RESOLVED_ACFS_HOME="$candidate"

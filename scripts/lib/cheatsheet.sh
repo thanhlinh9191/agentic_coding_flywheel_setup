@@ -541,6 +541,13 @@ cheatsheet_resolve_acfs_home() {
     fi
   fi
 
+  if [[ ! -f "$_CHEATSHEET_SYSTEM_STATE_FILE" ]] && [[ -n "$_CHEATSHEET_EXPLICIT_ACFS_HOME" ]] && cheatsheet_candidate_has_acfs_data "$_CHEATSHEET_EXPLICIT_ACFS_HOME"; then
+    _CHEATSHEET_RESOLVED_ACFS_HOME="$_CHEATSHEET_EXPLICIT_ACFS_HOME"
+    _CHEATSHEET_RESOLVED_ACFS_HOME_SOURCE="explicit_acfs_home"
+    printf '%s\n' "$_CHEATSHEET_RESOLVED_ACFS_HOME"
+    return 0
+  fi
+
   candidate="$(cheatsheet_current_home_acfs_candidate 2>/dev/null || true)"
   if [[ -n "$candidate" ]]; then
     _CHEATSHEET_RESOLVED_ACFS_HOME="$candidate"

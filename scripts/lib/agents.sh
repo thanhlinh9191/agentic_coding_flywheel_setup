@@ -239,11 +239,13 @@ _agent_passwd_home_from_entry() {
 _agent_target_home() {
     local target_user="${1:-${TARGET_USER:-ubuntu}}"
     local explicit_home=""
+    local explicit_bin_dir=""
     local passwd_entry=""
     local current_user=""
     local current_home=""
 
     explicit_home="$(_agent_existing_abs_home "${TARGET_HOME:-}" 2>/dev/null || true)"
+    explicit_bin_dir="$(_agent_existing_abs_home "${ACFS_BIN_DIR:-}" 2>/dev/null || true)"
     current_user="$(_agent_resolve_current_user 2>/dev/null || true)"
     if [[ "$target_user" == "root" ]]; then
         printf '/root\n'
@@ -254,6 +256,13 @@ _agent_target_home() {
             || [[ -f "$explicit_home/.acfs/VERSION" ]] \
             || [[ -d "$explicit_home/.acfs/scripts/lib" ]]
     }; then
+        printf '%s\n' "$explicit_home"
+        return 0
+    fi
+    if [[ -n "$explicit_home" ]] \
+        && [[ -n "${ACFS_BIN_DIR:-}" ]] \
+        && [[ -z "$(_agent_validate_bin_dir_for_home "$explicit_bin_dir" "$explicit_home" 2>/dev/null || true)" ]] \
+        && [[ "$target_user" == "$current_user" ]]; then
         printf '%s\n' "$explicit_home"
         return 0
     fi

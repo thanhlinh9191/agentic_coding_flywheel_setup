@@ -593,6 +593,12 @@ support_resolve_acfs_home() {
         fi
     fi
 
+    if [[ ! -f "$SUPPORT_SYSTEM_STATE_FILE" ]] && [[ -n "$_SUPPORT_ACFS_HOME" ]] && support_candidate_has_acfs_data "$_SUPPORT_ACFS_HOME"; then
+        _SUPPORT_ACFS_HOME_SOURCE="explicit_acfs_home"
+        printf '%s\n' "$_SUPPORT_ACFS_HOME"
+        return 0
+    fi
+
     candidate="$(support_current_home_acfs_candidate 2>/dev/null || true)"
     if [[ -n "$candidate" ]]; then
         _SUPPORT_ACFS_HOME_SOURCE="current_home"

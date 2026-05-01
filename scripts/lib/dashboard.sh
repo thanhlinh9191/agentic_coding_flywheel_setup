@@ -468,6 +468,13 @@ dashboard_resolve_acfs_home() {
         fi
     fi
 
+    if [[ ! -f "$_DASHBOARD_SYSTEM_STATE_FILE" ]] && [[ -n "$_DASHBOARD_EXPLICIT_ACFS_HOME" ]] && dashboard_candidate_has_acfs_data "$_DASHBOARD_EXPLICIT_ACFS_HOME"; then
+        _DASHBOARD_RESOLVED_ACFS_HOME="$_DASHBOARD_EXPLICIT_ACFS_HOME"
+        _DASHBOARD_RESOLVED_ACFS_HOME_SOURCE="explicit_acfs_home"
+        printf '%s\n' "$_DASHBOARD_RESOLVED_ACFS_HOME"
+        return 0
+    fi
+
     candidate="$(dashboard_current_home_acfs_candidate 2>/dev/null || true)"
     if [[ -n "$candidate" ]]; then
         _DASHBOARD_RESOLVED_ACFS_HOME="$candidate"
