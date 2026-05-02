@@ -345,6 +345,7 @@ cmd_disable() {
 }
 
 cmd_test() {
+    local curl_bin=""
     local enabled
     enabled=$(_notif_config_read "ntfy_enabled")
     if [[ "$enabled" != "true" ]]; then
@@ -362,10 +363,16 @@ cmd_test() {
         return 1
     fi
 
+    curl_bin="$(notifications_system_binary_path curl 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
+        echo "Error: curl not available."
+        return 1
+    fi
+
     echo "Sending test notification to ${server}/${topic} ..."
 
     local http_code
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+    http_code=$("$curl_bin" -s -o /dev/null -w '%{http_code}' \
         --max-time 10 \
         -H "Title: ACFS Test Notification" \
         -H "Priority: default" \
@@ -504,6 +511,7 @@ cmd_send() {
     local title="${1:-}"
     local body="${2:-}"
     local priority="${3:-}"
+    local curl_bin=""
 
     if [[ -z "$title" ]]; then
         echo "Usage: acfs notifications send <title> [body] [priority]"
@@ -551,10 +559,16 @@ cmd_send() {
         return 1
     fi
 
+    curl_bin="$(notifications_system_binary_path curl 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
+        echo "Error: curl not available."
+        return 1
+    fi
+
     echo "Sending notification to ${server}/${topic} ..."
 
     local http_code
-    http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+    http_code=$("$curl_bin" -s -o /dev/null -w '%{http_code}' \
         --max-time 10 \
         -H "Title: ${title}" \
         -H "Priority: ${priority}" \
@@ -667,4 +681,6 @@ main() {
     esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

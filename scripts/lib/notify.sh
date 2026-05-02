@@ -349,6 +349,7 @@ acfs_notify() {
     local body="${2:-}"
     local priority="${3:-}"
     local tags="${4:-computer,acfs}"
+    local curl_bin=""
 
     # Must have a title
     if [[ -z "$title" ]]; then
@@ -402,14 +403,16 @@ acfs_notify() {
     priority="$(_acfs_notify_priority_value "$priority")"
     tags="$(_acfs_notify_header_value "$tags" "computer,acfs")"
 
-    # Require curl
-    if ! command -v curl &>/dev/null; then
+    # Require curl from a trusted system path. Notification hooks may run from
+    # polluted interactive shells, so do not inherit a caller-provided curl.
+    curl_bin="$(_acfs_notify_system_binary_path curl 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
         return 0
     fi
 
     # Send notification in background (non-blocking, fire-and-forget)
     (
-        curl -s -o /dev/null \
+        "$curl_bin" -s -o /dev/null \
             --max-time 10 \
             -H "Title: ${title}" \
             -H "Priority: ${priority}" \

@@ -250,9 +250,16 @@ webhook_is_ipv6_literal() {
 }
 
 webhook_public_ip() {
+    local curl_bin=""
     local ip=""
 
-    ip=$(curl -fsS --max-time 2 https://ifconfig.me/ip 2>/dev/null || true)
+    curl_bin="$(webhook_system_binary_path curl 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
+        printf 'unknown\n'
+        return 0
+    fi
+
+    ip=$("$curl_bin" -fsS --max-time 2 https://ifconfig.me/ip 2>/dev/null || true)
     ip="${ip//$'\r'/}"
     ip="${ip//$'\n'/}"
     ip="${ip//[[:space:]]/}"
@@ -367,17 +374,21 @@ webhook_format_payload() {
     local status="$1"
     local summary_file="$2"
     local url="${ACFS_WEBHOOK_URL:-}"
+    local jq_bin=""
 
     # Read summary data
     local hostname ip duration_seconds tools_installed acfs_version timestamp
     hostname=$(hostname 2>/dev/null || echo "unknown")
     ip=$(webhook_public_ip)
+    jq_bin="$(webhook_system_binary_path jq 2>/dev/null || true)"
+    [[ -n "$jq_bin" ]] || return 1
 
-    if [[ -f "$summary_file" ]] && command -v jq &>/dev/null; then
-        duration_seconds=$(jq -r '.total_seconds // 0' "$summary_file" 2>/dev/null) || duration_seconds=0
-        tools_installed=$(jq -r '.phases | length // 0' "$summary_file" 2>/dev/null) || tools_installed=0
-        acfs_version=$(jq -r '.environment.acfs_version // "unknown"' "$summary_file" 2>/dev/null) || acfs_version="unknown"
-        timestamp=$(jq -r '.timestamp // empty' "$summary_file" 2>/dev/null) || timestamp=$(date -Iseconds)
+    if [[ -f "$summary_file" ]]; then
+        duration_seconds=$("$jq_bin" -r '.total_seconds // 0' "$summary_file" 2>/dev/null) || duration_seconds=0
+        tools_installed=$("$jq_bin" -r '.phases | length // 0' "$summary_file" 2>/dev/null) || tools_installed=0
+        acfs_version=$("$jq_bin" -r '.environment.acfs_version // "unknown"' "$summary_file" 2>/dev/null) || acfs_version="unknown"
+        timestamp=$("$jq_bin" -r '.timestamp // empty' "$summary_file" 2>/dev/null) || timestamp=""
+        [[ -n "$timestamp" ]] || timestamp=$(date -Iseconds)
     else
         duration_seconds=0
         tools_installed=0
@@ -388,21 +399,21 @@ webhook_format_payload() {
     # Detect platform and format appropriately
     if [[ "$url" == *"hooks.slack.com"* ]]; then
         # Slack webhook format
-        _webhook_format_slack "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
+        _webhook_format_slack "$jq_bin" "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
     elif [[ "$url" == *"discord.com/api/webhooks"* ]]; then
         # Discord webhook format
-        _webhook_format_discord "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
+        _webhook_format_discord "$jq_bin" "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
     else
         # Generic JSON format
-        _webhook_format_generic "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
+        _webhook_format_generic "$jq_bin" "$status" "$hostname" "$ip" "$duration_seconds" "$tools_installed" "$acfs_version" "$timestamp"
     fi
 }
 
 # Generic JSON payload
 _webhook_format_generic() {
-    local status="$1" hostname="$2" ip="$3" duration="$4" tools="$5" version="$6" timestamp="$7"
+    local jq_bin="$1" status="$2" hostname="$3" ip="$4" duration="$5" tools="$6" version="$7" timestamp="$8"
 
-    jq -n \
+    "$jq_bin" -n \
         --arg event "install_${status}" \
         --arg timestamp "$timestamp" \
         --arg hostname "$hostname" \
@@ -426,7 +437,7 @@ _webhook_format_generic() {
 
 # Slack webhook format
 _webhook_format_slack() {
-    local status="$1" hostname="$2" ip="$3" duration="$4" tools="$5" version="$6" timestamp="$7"
+    local jq_bin="$1" status="$2" hostname="$3" ip="$4" duration="$5" tools="$6" version="$7" timestamp="$8"
 
     local emoji color text
     if [[ "$status" == "success" ]]; then
@@ -446,7 +457,7 @@ _webhook_format_slack() {
         duration_human="${duration}s"
     fi
 
-    jq -n \
+    "$jq_bin" -n \
         --arg text "$emoji $text" \
         --arg color "$color" \
         --arg hostname "$hostname" \
@@ -472,7 +483,7 @@ _webhook_format_slack() {
 
 # Discord webhook format
 _webhook_format_discord() {
-    local status="$1" hostname="$2" ip="$3" duration="$4" tools="$5" version="$6" timestamp="$7"
+    local jq_bin="$1" status="$2" hostname="$3" ip="$4" duration="$5" tools="$6" version="$7" timestamp="$8"
 
     local emoji color title
     if [[ "$status" == "success" ]]; then
@@ -492,7 +503,7 @@ _webhook_format_discord() {
         duration_human="${duration}s"
     fi
 
-    jq -n \
+    "$jq_bin" -n \
         --arg title "$title" \
         --argjson color "$color" \
         --arg hostname "$hostname" \
@@ -529,6 +540,8 @@ webhook_send() {
     local status="${1:-success}"
     local summary_file="${2:-${ACFS_SUMMARY_FILE:-}}"
     local url="${ACFS_WEBHOOK_URL:-}"
+    local curl_bin=""
+    local jq_bin=""
 
     # No webhook configured - silently skip
     if [[ -z "$url" ]]; then
@@ -540,14 +553,17 @@ webhook_send() {
         return 0
     fi
 
-    # Require curl
-    if ! command -v curl &>/dev/null; then
+    # Require curl from a trusted system path. Webhook hooks may run from
+    # polluted interactive shells, so do not inherit a caller-provided curl.
+    curl_bin="$(webhook_system_binary_path curl 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
         log_warn "Webhook skipped: curl not available"
         return 0
     fi
 
-    # Require jq for payload formatting
-    if ! command -v jq &>/dev/null; then
+    # Require jq for payload formatting from the same trusted resolver.
+    jq_bin="$(webhook_system_binary_path jq 2>/dev/null || true)"
+    if [[ -z "$jq_bin" ]]; then
         log_warn "Webhook skipped: jq not available"
         return 0
     fi
@@ -565,7 +581,7 @@ webhook_send() {
     # Runs in background to not block install completion
     (
         local http_code
-        http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+        http_code=$("$curl_bin" -s -o /dev/null -w '%{http_code}' \
             --max-time 5 \
             -X POST \
             -H "Content-Type: application/json" \

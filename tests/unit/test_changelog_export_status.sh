@@ -1452,16 +1452,34 @@ test_webhook_payload_rejects_non_ip_public_ip_response() {
 
     setup_mock_env
 
+    local fake_bin="$TEST_HOME/fake-bin"
     local output=""
+    mkdir -p "$fake_bin"
+
+    cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${ACFS_FAKE_CURL_RESPONSE:-}"
+EOF
+    chmod +x "$fake_bin/curl"
+
     output=$(cd "$TEST_HOME" && HOME="$TEST_HOME" ACFS_WEBHOOK_URL="https://example.com/hook" \
+        ACFS_FAKE_CURL_RESPONSE="<html>temporarily unavailable</html>" \
         bash -c '
             log_warn() { :; }
             log_detail() { :; }
-            curl() { printf "%s\n" "<html>temporarily unavailable</html>"; }
             unset _ACFS_WEBHOOK_SH_LOADED
             source "$1"
+            fake_bin="$2"
+            webhook_system_binary_path() {
+                case "${1:-}" in
+                    curl) printf "%s/curl\n" "$fake_bin" ;;
+                    jq) command -v jq ;;
+                    *) command -v "${1:-}" ;;
+                esac
+            }
+            curl() { printf "%s\n" "198.51.100.77"; }
             webhook_format_payload success "" | jq -r ".ip"
-        ' _ "$WEBHOOK_SH" 2>&1)
+        ' _ "$WEBHOOK_SH" "$fake_bin" 2>&1)
 
     if [[ "$output" == "unknown" ]]; then
         harness_pass "webhook payload rejects non-IP public IP response"
@@ -1475,20 +1493,38 @@ test_webhook_payload_rejects_non_ip_public_ip_response() {
 test_webhook_public_ip_accepts_valid_ips_only() {
     setup_mock_env
 
+    local fake_bin="$TEST_HOME/fake-bin"
     local output=""
+    mkdir -p "$fake_bin"
+
+    cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${ACFS_FAKE_CURL_RESPONSE:-}"
+EOF
+    chmod +x "$fake_bin/curl"
+
     output=$(cd "$TEST_HOME" && HOME="$TEST_HOME" \
         bash -c '
             log_warn() { :; }
             log_detail() { :; }
             unset _ACFS_WEBHOOK_SH_LOADED
             source "$1"
-            curl() { printf "%s\n" "203.0.113.9"; }
+            fake_bin="$2"
+            webhook_system_binary_path() {
+                case "${1:-}" in
+                    curl) printf "%s/curl\n" "$fake_bin" ;;
+                    jq) command -v jq ;;
+                    *) command -v "${1:-}" ;;
+                esac
+            }
+            curl() { printf "%s\n" "bad-function-curl"; }
+            export ACFS_FAKE_CURL_RESPONSE="203.0.113.9"
             printf "ipv4=%s\n" "$(webhook_public_ip)"
-            curl() { printf "%s\n" "2001:db8::1"; }
+            export ACFS_FAKE_CURL_RESPONSE="2001:db8::1"
             printf "ipv6=%s\n" "$(webhook_public_ip)"
-            curl() { printf "%s\n" "bad:feed"; }
+            export ACFS_FAKE_CURL_RESPONSE="bad:feed"
             printf "hex_words=%s\n" "$(webhook_public_ip)"
-        ' _ "$WEBHOOK_SH" 2>&1)
+        ' _ "$WEBHOOK_SH" "$fake_bin" 2>&1)
 
     if [[ "$output" == *"ipv4=203.0.113.9"* ]] \
         && [[ "$output" == *"ipv6=2001:db8::1"* ]] \
@@ -1496,6 +1532,114 @@ test_webhook_public_ip_accepts_valid_ips_only() {
         harness_pass "webhook public IP accepts valid IPs only"
     else
         harness_fail "webhook public IP accepts valid IPs only" "$output"
+    fi
+
+    cleanup_mock_env
+}
+
+test_webhook_payload_defaults_missing_summary_timestamp() {
+    if ! command -v jq >/dev/null 2>&1; then
+        harness_warn "jq not available — skipping webhook timestamp fallback test"
+        return 0
+    fi
+
+    setup_mock_env
+
+    local fake_bin="$TEST_HOME/fake-bin"
+    local summary="$TEST_HOME/summary.json"
+    local output=""
+    mkdir -p "$fake_bin"
+
+    cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "203.0.113.9"
+EOF
+    chmod +x "$fake_bin/curl"
+
+    cat > "$summary" <<'EOF'
+{
+  "total_seconds": 7,
+  "phases": [],
+  "environment": {
+    "acfs_version": "test"
+  }
+}
+EOF
+
+    output=$(cd "$TEST_HOME" && HOME="$TEST_HOME" ACFS_WEBHOOK_URL="https://example.com/hook" \
+        bash -c '
+            log_warn() { :; }
+            log_detail() { :; }
+            unset _ACFS_WEBHOOK_SH_LOADED
+            source "$1"
+            fake_bin="$2"
+            webhook_system_binary_path() {
+                case "${1:-}" in
+                    curl) printf "%s/curl\n" "$fake_bin" ;;
+                    jq) command -v jq ;;
+                    *) command -v "${1:-}" ;;
+                esac
+            }
+            webhook_format_payload success "$3" | jq -r ".timestamp"
+        ' _ "$WEBHOOK_SH" "$fake_bin" "$summary" 2>&1)
+
+    if [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
+        harness_pass "webhook payload defaults missing summary timestamp"
+    else
+        harness_fail "webhook payload defaults missing summary timestamp" "$output"
+    fi
+
+    cleanup_mock_env
+}
+
+test_acfs_notify_uses_resolved_curl_path() {
+    setup_mock_env
+
+    local fake_bin="$TEST_HOME/fake-bin"
+    local capture="$TEST_HOME/notify-curl-args"
+    local poisoned="$TEST_HOME/poisoned-curl-used"
+    local output=""
+
+    mkdir -p "$fake_bin"
+
+    cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+: > "$ACFS_CURL_CAPTURE"
+while [[ $# -gt 0 ]]; do
+    printf '<%s>\n' "$1" >> "$ACFS_CURL_CAPTURE"
+    shift
+done
+EOF
+    chmod +x "$fake_bin/curl"
+
+    output=$(cd "$TEST_HOME" && HOME="$TEST_HOME" ACFS_NTFY_ENABLED=true \
+        ACFS_NTFY_TOPIC=cli-topic ACFS_NTFY_SERVER=https://ntfy.example \
+        ACFS_CURL_CAPTURE="$capture" ACFS_POISONED_CURL="$poisoned" \
+        bash -c '
+            unset _ACFS_NOTIFY_SH_LOADED
+            source "$1"
+            fake_bin="$2"
+            _acfs_notify_system_binary_path() {
+                if [[ "${1:-}" == "curl" ]]; then
+                    printf "%s/curl\n" "$fake_bin"
+                    return 0
+                fi
+                command -v "${1:-}"
+            }
+            curl() { printf "poisoned\n" > "$ACFS_POISONED_CURL"; }
+            acfs_notify "Build Done" "" default
+            for _ in {1..20}; do
+                [[ -s "$ACFS_CURL_CAPTURE" ]] && break
+                sleep 0.1
+            done
+            printf "capture=%s\npoisoned=%s\n" "$(cat "$ACFS_CURL_CAPTURE" 2>/dev/null || true)" "$(cat "$ACFS_POISONED_CURL" 2>/dev/null || true)"
+        ' _ "$NOTIFY_SH" "$fake_bin" 2>&1)
+
+    if [[ "$output" == *"<Title: Build Done>"* ]] \
+        && [[ "$output" != *"poisoned=poisoned"* ]]; then
+        harness_pass "acfs_notify uses resolved curl path"
+    else
+        harness_fail "acfs_notify uses resolved curl path" "$output"
     fi
 
     cleanup_mock_env
@@ -1560,13 +1704,35 @@ EOF
 
     output=$(cd "$TEST_HOME" && HOME="relative-home" TARGET_HOME="$target_home" \
         PATH="$fake_bin:/usr/bin:/bin" ACFS_CURL_CAPTURE="$capture" \
-        bash "$NOTIFICATIONS_SH" send $'Build\nDone' "" default 2>&1)
+        bash -c '
+            source "$1"
+            fake_bin="$2"
+            notifications_system_binary_path() {
+                if [[ "${1:-}" == "curl" ]]; then
+                    printf "%s/curl\n" "$fake_bin"
+                    return 0
+                fi
+                command -v "${1:-}"
+            }
+            cmd_send "$3" "$4" "$5"
+        ' _ "$NOTIFICATIONS_SH" "$fake_bin" $'Build\nDone' "" default 2>&1)
     headers="$(cat "$capture" 2>/dev/null || true)"
     : > "$capture"
 
     invalid_output=$(cd "$TEST_HOME" && HOME="relative-home" TARGET_HOME="$target_home" \
         PATH="$fake_bin:/usr/bin:/bin" ACFS_CURL_CAPTURE="$capture" \
-        bash "$NOTIFICATIONS_SH" send "Build" "" $'urgent\nTitle: hacked' 2>&1) || invalid_status=$?
+        bash -c '
+            source "$1"
+            fake_bin="$2"
+            notifications_system_binary_path() {
+                if [[ "${1:-}" == "curl" ]]; then
+                    printf "%s/curl\n" "$fake_bin"
+                    return 0
+                fi
+                command -v "${1:-}"
+            }
+            cmd_send "$3" "$4" "$5"
+        ' _ "$NOTIFICATIONS_SH" "$fake_bin" "Build" "" $'urgent\nTitle: hacked' 2>&1) || invalid_status=$?
 
     if [[ "$output" == *"Notification sent (HTTP 200)."* ]] \
         && [[ "$headers" == *"<Title: Build Done>"* ]] \
@@ -11166,6 +11332,8 @@ main() {
     test_webhook_reads_config_from_target_home_when_home_is_relative || true
     test_webhook_payload_rejects_non_ip_public_ip_response || true
     test_webhook_public_ip_accepts_valid_ips_only || true
+    test_webhook_payload_defaults_missing_summary_timestamp || true
+    test_acfs_notify_uses_resolved_curl_path || true
     test_notifications_cli_uses_target_home_when_home_is_relative || true
     test_notifications_cli_sanitizes_headers_before_curl || true
 
