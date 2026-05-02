@@ -275,9 +275,7 @@ install_powerlevel10k() {
 
     log_detail "Installing Powerlevel10k theme..."
 
-    git clone --depth=1 "$P10K_REPO" "$p10k_dir"
-
-    if [[ ! -d "$p10k_dir" ]]; then
+    if ! git clone --depth=1 "$P10K_REPO" "$p10k_dir"; then
         log_error "Failed to install Powerlevel10k"
         return 1
     fi
@@ -295,7 +293,10 @@ install_zsh_plugins() {
     # zsh-autosuggestions
     if [[ ! -d "$plugins_dir/zsh-autosuggestions" ]]; then
         log_detail "Installing zsh-autosuggestions..."
-        git clone "$ZSH_AUTOSUGGESTIONS_REPO" "$plugins_dir/zsh-autosuggestions"
+        if ! git clone "$ZSH_AUTOSUGGESTIONS_REPO" "$plugins_dir/zsh-autosuggestions"; then
+            log_error "Failed to install zsh-autosuggestions"
+            return 1
+        fi
     else
         log_detail "zsh-autosuggestions already installed"
     fi
@@ -303,7 +304,10 @@ install_zsh_plugins() {
     # zsh-syntax-highlighting
     if [[ ! -d "$plugins_dir/zsh-syntax-highlighting" ]]; then
         log_detail "Installing zsh-syntax-highlighting..."
-        git clone "$ZSH_SYNTAX_HIGHLIGHTING_REPO" "$plugins_dir/zsh-syntax-highlighting"
+        if ! git clone "$ZSH_SYNTAX_HIGHLIGHTING_REPO" "$plugins_dir/zsh-syntax-highlighting"; then
+            log_error "Failed to install zsh-syntax-highlighting"
+            return 1
+        fi
     else
         log_detail "zsh-syntax-highlighting already installed"
     fi

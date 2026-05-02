@@ -231,6 +231,9 @@ jobs:
       - name: Run install helpers tests
         run: bash scripts/lib/test_install_helpers.sh
 
+      - name: Run zsh library tests
+        run: bash scripts/lib/test_zsh.sh
+
       - name: Run RU integration tests
         run: |
           bash scripts/tests/test_ru_update.sh
