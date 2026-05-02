@@ -316,6 +316,12 @@ result=$(redact_and_read "prefixed_json_secrets.txt" '{"gemini_api_key":"AIzaSyE
 assert_contains "Prefixed JSON API key redacted" "$result" '"gemini_api_key": "<REDACTED:generic_secret>"'
 assert_contains "Prefixed JSON password redacted" "$result" '"db_password": "<REDACTED:password>"'
 
+result=$(redact_and_read "tabbed_json_secrets.txt" $'{"api_key"\t:\t"mysupersecretvalue123","db_password"\t:\t"hunter2"}')
+assert_contains "Tabbed JSON API key redacted" "$result" '"api_key": "<REDACTED:api_key>"'
+assert_contains "Tabbed JSON password redacted" "$result" '"db_password": "<REDACTED:password>"'
+assert_not_contains "Tabbed JSON secret values removed" "$result" "mysupersecretvalue123"
+assert_not_contains "Tabbed JSON password value removed" "$result" "hunter2"
+
 result=$(redact_and_read "camel_secret_keys.txt" "vercelToken=vercel-token-value-12345
 dbPassword=hunter2
 tokenCount=123456789")
