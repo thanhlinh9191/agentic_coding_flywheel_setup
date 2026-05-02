@@ -163,7 +163,7 @@ test_reset_wait_time_invalid() {
 }
 
 test_has_gh_auth_prefers_target_home_binary() {
-    local temp_dir target_home fake_path runtime_home marker status=1
+    local temp_dir target_home fake_path marker status=1
     local old_home="${HOME:-}"
     local old_path="${PATH:-}"
     local old_target_user="${TARGET_USER-__unset__}"
@@ -173,10 +173,9 @@ test_has_gh_auth_prefers_target_home_binary() {
     temp_dir=$(mktemp -d)
     target_home="$temp_dir/target"
     fake_path="$temp_dir/fake-path"
-    runtime_home="$temp_dir/runtime"
     marker="$temp_dir/marker"
 
-    mkdir -p "$target_home/.local/bin" "$fake_path" "$runtime_home"
+    mkdir -p "$target_home/.local/bin" "$fake_path"
 
     cat > "$target_home/.local/bin/gh" <<EOF
 #!/usr/bin/env bash
@@ -195,9 +194,9 @@ exit 1
 EOF
     chmod +x "$fake_path/gh"
 
-    HOME="$runtime_home"
+    HOME="relative-home"
     PATH="$fake_path:/usr/bin:/bin"
-    TARGET_USER="acfstestuser"
+    unset TARGET_USER
     TARGET_HOME="$target_home"
     ACFS_BIN_DIR="$target_home/.local/bin"
 
@@ -305,10 +304,6 @@ test_fetch_with_backoff_strips_fail_flag_for_rate_limit_status() {
     # Curl's -f/--fail turns those HTTP responses into generic failures before
     # the rate-limit classifier can see the response headers and body.
     local temp_dir tmp_file status=1
-    local old_initial="${GITHUB_BACKOFF_INITIAL:-}"
-    local old_max="${GITHUB_BACKOFF_MAX:-}"
-    local had_base_args=false
-    local -a saved_base_args=()
 
     temp_dir=$(mktemp -d)
     tmp_file=$(mktemp)
@@ -369,28 +364,21 @@ printf '200'
 EOF
     chmod +x "$temp_dir/curl"
 
-    if declare -p ACFS_CURL_BASE_ARGS &>/dev/null; then
-        had_base_args=true
-        saved_base_args=("${ACFS_CURL_BASE_ARGS[@]}")
-    fi
-    ACFS_CURL_BASE_ARGS=(--proto '=https' --proto-redir '=https' --connect-timeout 30 --max-time 300 -fsSL)
-    GITHUB_BACKOFF_INITIAL=0
-    GITHUB_BACKOFF_MAX=1
-
-    if TEST_GITHUB_CURL_DIR="$temp_dir" PATH="$temp_dir:/usr/bin:/bin" GITHUB_MAX_RETRIES=2 \
-        github_fetch_with_backoff "https://example.invalid/file" "$tmp_file" "rate-limit-status-test" >/dev/null 2>/dev/null; then
+    if TEST_GITHUB_CURL_DIR="$temp_dir" GITHUB_MAX_RETRIES=2 bash -c '
+        set -euo pipefail
+        source "$1"
+        _github_api_curl_binary_path() {
+            printf "%s/curl\n" "$TEST_GITHUB_CURL_DIR"
+        }
+        ACFS_CURL_BASE_ARGS=(--proto "=https" --proto-redir "=https" --connect-timeout 30 --max-time 300 -fsSL)
+        GITHUB_BACKOFF_INITIAL=0
+        GITHUB_BACKOFF_MAX=1
+        github_fetch_with_backoff "https://example.invalid/file" "$2" "rate-limit-status-test" >/dev/null 2>/dev/null
+    ' _ "$LIB_DIR/github_api.sh" "$tmp_file"; then
         if [[ "$(cat "$tmp_file" 2>/dev/null)" == "ok" ]] && [[ "$(cat "$temp_dir/calls" 2>/dev/null)" == "2" ]]; then
             status=0
         fi
     fi
-
-    if [[ "$had_base_args" == "true" ]]; then
-        ACFS_CURL_BASE_ARGS=("${saved_base_args[@]}")
-    else
-        unset ACFS_CURL_BASE_ARGS 2>/dev/null || true
-    fi
-    GITHUB_BACKOFF_INITIAL="$old_initial"
-    GITHUB_BACKOFF_MAX="$old_max"
 
     rm -rf "$temp_dir"
     rm -f "$tmp_file"
@@ -441,9 +429,12 @@ EOF
     chmod +x "$temp_dir/curl"
 
     trap_output="$(
-        PATH="$temp_dir:/usr/bin:/bin" GITHUB_MAX_RETRIES=1 bash -c '
+        TEST_GITHUB_CURL_DIR="$temp_dir" GITHUB_MAX_RETRIES=1 bash -c '
             set -euo pipefail
             source "$1"
+            _github_api_curl_binary_path() {
+                printf "%s/curl\n" "$TEST_GITHUB_CURL_DIR"
+            }
             github_fetch_with_backoff "https://example.invalid/file" "$2" "trap-test" >/dev/null
             trap -p RETURN
         ' _ "$LIB_DIR/github_api.sh" "$tmp_file"
@@ -497,12 +488,16 @@ EOF
     chmod +x "$temp_dir/curl"
 
     trap_output="$(
-        PATH="$temp_dir:/usr/bin:/bin" GITHUB_MAX_RETRIES=1 bash -c '
+        TEST_GITHUB_CURL_DIR="$temp_dir" GITHUB_MAX_RETRIES=1 bash -c '
             set -euo pipefail
             source "$1"
+            output_file="$2"
+            _github_api_curl_binary_path() {
+                printf "%s/curl\n" "$TEST_GITHUB_CURL_DIR"
+            }
             probe_return_trap() {
                 trap "caller_return_seen=1" RETURN
-                github_fetch_with_backoff "https://example.invalid/file" "$2" "trap-test" >/dev/null
+                github_fetch_with_backoff "https://example.invalid/file" "$output_file" "trap-test" >/dev/null
                 trap -p RETURN
             }
             probe_return_trap
@@ -556,15 +551,40 @@ printf '200'
 EOF
     chmod +x "$temp_dir/curl"
 
-    PATH="$temp_dir:/usr/bin:/bin" GITHUB_MAX_RETRIES=1 bash -c '
+    TEST_GITHUB_CURL_DIR="$temp_dir" GITHUB_MAX_RETRIES=1 bash -c '
         set -euo pipefail
         source "$1"
+        _github_api_curl_binary_path() {
+            printf "%s/curl\n" "$TEST_GITHUB_CURL_DIR"
+        }
         github_fetch_with_backoff "https://example.invalid/file" "$2" "write-failure-test" >/dev/null
     ' _ "$LIB_DIR/github_api.sh" "$missing_output" || status=$?
 
     rm -rf "$temp_dir"
 
     [[ "$status" -ne 0 ]]
+}
+
+test_fetch_with_backoff_ignores_shell_function_curl() {
+    local temp_dir marker output status=0
+
+    temp_dir=$(mktemp -d)
+    marker="$temp_dir/poisoned"
+    output="$temp_dir/output"
+
+    ACFS_POISON_MARKER="$marker" GITHUB_MAX_RETRIES=1 bash -c '
+        set -euo pipefail
+        source "$1"
+        curl() {
+            printf poisoned > "$ACFS_POISON_MARKER"
+            printf 000
+            return 0
+        }
+        ACFS_CURL_BASE_ARGS=(--connect-timeout 1 --max-time 1 -sS)
+        github_fetch_with_backoff "https://127.0.0.1:9/acfs" "$2" "function-poison-test" >/dev/null 2>/dev/null
+    ' _ "$LIB_DIR/github_api.sh" "$output" || status=$?
+
+    [[ "$status" -ne 0 && ! -e "$marker" ]]
 }
 
 test_latest_release_returns_nonzero_on_fetch_failure() {
@@ -632,6 +652,7 @@ main() {
     run_test "Fetch backoff clears RETURN trap" test_fetch_with_backoff_clears_return_trap
     run_test "Fetch backoff preserves caller RETURN trap" test_fetch_with_backoff_preserves_caller_return_trap
     run_test "Fetch backoff reports output write failure" test_fetch_with_backoff_reports_output_write_failure
+    run_test "Fetch backoff ignores shell function curl" test_fetch_with_backoff_ignores_shell_function_curl
     run_test "Latest release failure returns non-zero" test_latest_release_returns_nonzero_on_fetch_failure
     run_test "Latest release preserves caller RETURN trap" test_latest_release_preserves_caller_return_trap
 

@@ -195,6 +195,10 @@ _github_api_system_binary_path() {
     return 1
 }
 
+_github_api_curl_binary_path() {
+    _github_api_system_binary_path curl
+}
+
 _github_api_getent_passwd_entry() {
     local user="${1-}"
     local getent_bin=""
@@ -447,7 +451,18 @@ github_fetch_with_backoff() {
     local delay="$GITHUB_BACKOFF_INITIAL"
     local attempt=0
     local max_attempts="$GITHUB_MAX_RETRIES"
+    local curl_bin=""
     local -a curl_base_args=()
+
+    curl_bin="$(_github_api_curl_binary_path 2>/dev/null || true)"
+    if [[ -z "$curl_bin" ]]; then
+        if declare -f log_error &>/dev/null; then
+            log_error "GitHub fetch failed: curl not available for $description"
+        else
+            echo -e "\033[0;31mGitHub fetch failed: curl not available\033[0m" >&2
+        fi
+        return 2
+    fi
 
     # Build curl base args safely.
     # Avoid "${array[@]:-}" here because it expands to a blank argument when the
@@ -456,7 +471,7 @@ github_fetch_with_backoff() {
         curl_base_args=("${ACFS_CURL_BASE_ARGS[@]}")
     else
         curl_base_args=(--connect-timeout 30 --max-time 300 -sSL)
-        if command -v curl &>/dev/null && curl --help all 2>/dev/null | grep -q -- '--proto'; then
+        if "$curl_bin" --help all 2>/dev/null | grep -q -- '--proto'; then
             curl_base_args=(--proto '=https' --proto-redir '=https' --connect-timeout 30 --max-time 300 -sSL)
         fi
     fi
@@ -482,7 +497,7 @@ github_fetch_with_backoff() {
 
         # Fetch with headers dumped to file
         local http_code
-        http_code=$(curl -sS -w '%{http_code}' \
+        http_code=$("$curl_bin" -sS -w '%{http_code}' \
             "${curl_base_args[@]}" \
             "${auth_header[@]}" \
             -D "$tmp_headers" \
@@ -493,11 +508,27 @@ github_fetch_with_backoff() {
         if [[ "$http_code" == "200" ]]; then
             local status=0
             if [[ -n "$output_file" ]]; then
-                mv "$tmp_body" "$output_file"
-                status=$?
+                if mv "$tmp_body" "$output_file" 2>/dev/null; then
+                    status=0
+                else
+                    status=$?
+                    if declare -f log_error &>/dev/null; then
+                        log_error "GitHub fetch failed: unable to write $output_file for $description"
+                    else
+                        echo -e "\033[0;31mGitHub fetch failed: unable to write output file\033[0m" >&2
+                    fi
+                fi
             else
-                cat "$tmp_body"
-                status=$?
+                if cat "$tmp_body"; then
+                    status=0
+                else
+                    status=$?
+                    if declare -f log_error &>/dev/null; then
+                        log_error "GitHub fetch failed: unable to print response for $description"
+                    else
+                        echo -e "\033[0;31mGitHub fetch failed: unable to print response\033[0m" >&2
+                    fi
+                fi
             fi
             _github_remove_temp_files "$tmp_body" "$tmp_headers"
             return "$status"
@@ -507,8 +538,8 @@ github_fetch_with_backoff() {
         # Note: Use tail -1 to get headers from the final response in case of redirects.
         local rate_remaining="" rate_reset=""
         if [[ -r "$tmp_headers" ]]; then
-            rate_remaining=$(grep -i "^x-ratelimit-remaining:" "$tmp_headers" 2>/dev/null | tail -n 1 | cut -d: -f2- | tr -d ' \r\n')
-            rate_reset=$(grep -i "^x-ratelimit-reset:" "$tmp_headers" 2>/dev/null | tail -n 1 | cut -d: -f2- | tr -d ' \r\n')
+            rate_remaining=$(grep -i "^x-ratelimit-remaining:" "$tmp_headers" 2>/dev/null | tail -n 1 | cut -d: -f2- | tr -d ' \r\n' || true)
+            rate_reset=$(grep -i "^x-ratelimit-reset:" "$tmp_headers" 2>/dev/null | tail -n 1 | cut -d: -f2- | tr -d ' \r\n' || true)
         fi
 
         # Check if this is a rate limit error
@@ -652,7 +683,12 @@ github_download_installer() {
         if declare -f acfs_download_to_file &>/dev/null; then
             acfs_download_to_file "$url" "$output" "$name"
         else
-            curl --connect-timeout 30 --max-time 300 -fsSL "$url" -o "$output"
+            local curl_bin=""
+            curl_bin="$(_github_api_curl_binary_path 2>/dev/null || true)"
+            if [[ -z "$curl_bin" ]]; then
+                return 1
+            fi
+            "$curl_bin" --connect-timeout 30 --max-time 300 -fsSL "$url" -o "$output"
         fi
     fi
 }
