@@ -8467,16 +8467,47 @@ EOF
     [[ ! -e "$curl_marker" ]]
 }
 
+@test "stack Agent Mail wait uses system curl helper" {
+    local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
+    local curl_marker="${BATS_TEST_TMPDIR}/stack-agent-mail-curl-poison.marker"
+
+    # shellcheck disable=SC1090
+    source "$stack_lib"
+
+    _stack_curl() {
+        : > "$curl_marker"
+        return 42
+    }
+    _stack_system_curl() {
+        case "$*" in
+            *"/health/liveness"*|*"/healthz"*)
+                return 0
+                ;;
+            *"/health"*)
+                printf '%s\n' '{"status":"ready"}'
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    }
+
+    run _stack_wait_for_agent_mail_health
+
+    assert_success
+    [[ ! -e "$curl_marker" ]]
+}
+
 @test "stack Agent Mail target shell snippets use a local curl wrapper" {
     local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
 
     run grep -F 'stack_service_curl() {' "$stack_lib"
     assert_success
 
-    run rg -n '(^|[[:space:]])curl -fsS --max-time 5 http://127\.0\.0\.1:8765/health' "$stack_lib"
+    run rg -n '(^|[[:space:]])curl -fsS --max-time (5|10) http://127\.0\.0\.1:8765/health' "$stack_lib"
     assert_failure
 
-    run rg -n '(^|[[:space:]])_stack_curl -fsS --max-time 5 http://127\.0\.0\.1:8765/health' "$stack_lib"
+    run rg -n '(^|[[:space:]])_stack_curl -fsS --max-time (5|10) http://127\.0\.0\.1:8765/health' "$stack_lib"
     assert_failure
 }
 

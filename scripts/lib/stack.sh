@@ -622,13 +622,13 @@ _stack_repair_agent_mail_cli_symlink() {
 }
 
 _stack_agent_mail_liveness() {
-    _stack_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 || \
-        _stack_curl -fsS --max-time 10 http://127.0.0.1:8765/healthz >/dev/null 2>&1
+    _stack_system_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 || \
+        _stack_system_curl -fsS --max-time 10 http://127.0.0.1:8765/healthz >/dev/null 2>&1
 }
 
 _stack_agent_mail_readiness() {
     local readiness_body=""
-    readiness_body="$(_stack_curl -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null)" || return 1
+    readiness_body="$(_stack_system_curl -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null)" || return 1
     printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'
 }
 
