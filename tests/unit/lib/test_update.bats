@@ -8511,6 +8511,19 @@ EOF
     assert_failure
 }
 
+@test "doctor Agent Mail health checks use system curl helper" {
+    local doctor_lib="$PROJECT_ROOT/scripts/lib/doctor_fix.sh"
+
+    run grep -F 'doctor_fix_system_curl() {' "$doctor_lib"
+    assert_success
+
+    run grep -F 'doctor_fix_system_binary_path curl' "$doctor_lib"
+    assert_success
+
+    run rg -n '(^|[[:space:]])doctor_fix_curl -fsS --max-time 5 http://127\.0\.0\.1:8765/health' "$doctor_lib"
+    assert_failure
+}
+
 @test "stack verified installer command quotes inline env assignment values" {
     local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
 

@@ -409,6 +409,15 @@ doctor_fix_curl() {
     "$curl_bin" "$@"
 }
 
+doctor_fix_system_curl() {
+    local curl_bin=""
+
+    curl_bin="$(doctor_fix_system_binary_path curl 2>/dev/null || true)"
+    [[ -n "$curl_bin" ]] || return 127
+
+    "$curl_bin" "$@"
+}
+
 doctor_fix_stack_agent_mail_helpers_loaded() {
     declare -f _stack_agent_mail_cli_path >/dev/null 2>&1 \
         && declare -f _stack_repair_agent_mail_cli_symlink >/dev/null 2>&1 \
@@ -1896,7 +1905,7 @@ agent_mail_fix_launch_fallback() {
     am_mcp_path="$(doctor_fix_agent_mail_mcp_path "$am_bin" 2>/dev/null || true)"
     [[ -n "$am_mcp_path" ]] || return 1
 
-    if doctor_fix_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+    if doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
         return 0
     fi
 
@@ -2130,8 +2139,8 @@ fix_mcp_agent_mail() {
         doctor_fix_log WARN "MCP Agent Mail doctor fix did not complete cleanly"
     fi
 
-    if doctor_fix_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-       doctor_fix_curl -fsS --max-time 5 http://127.0.0.1:8765/health >/dev/null 2>&1; then
+    if doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+       doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health >/dev/null 2>&1; then
         service_healthy=true
     fi
 
