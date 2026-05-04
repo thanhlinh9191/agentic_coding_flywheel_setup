@@ -338,6 +338,12 @@ describe('Generated verified installer args', () => {
     expect(stackContent).toContain('fsfs_target="aarch64-unknown-linux-musl"');
     expect(stackContent).toContain("https://github.com/Dicklesworthstone/frankensearch/releases/latest");
     expect(stackContent).toContain("https://api.github.com/repos/Dicklesworthstone/frankensearch/releases?per_page=10");
+    expect(stackContent).toContain('done < <(acfs_curl --connect-timeout 30 --max-time 60');
+    expect(stackContent).toContain('fsfs_candidate="$(acfs_curl --connect-timeout 30 --max-time 60');
+    expect(stackContent).toContain('fsfs_checksum="$(acfs_curl --connect-timeout 30 --max-time 60');
+    expect(stackContent).not.toContain('done < <(curl -fsSL --connect-timeout 30 --max-time 60');
+    expect(stackContent).not.toContain('fsfs_candidate="$(curl -fsSL --connect-timeout 30 --max-time 60');
+    expect(stackContent).not.toContain('fsfs_checksum="$(curl -fsSL --connect-timeout 30 --max-time 60');
     expect(stackContent).toContain('for fsfs_version in "${fsfs_candidates[@]}"; do');
     expect(stackContent).toContain('fsfs-lite-${fsfs_version_bare}-${fsfs_target}.tar.xz');
     expect(stackContent).toContain('awk \'NR == 1 { print $1 }\'');
