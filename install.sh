@@ -3317,24 +3317,50 @@ acfs_run_verified_upstream_script_as_target_with_env() {
             return 1
         }
 
-        # Parse fresh checksums and get the updated expected hash
+        # Parse fresh checksums and get the updated installer contract.  The
+        # URL can change during migrations, such as mcp_agent_mail ->
+        # mcp_agent_mail_rust, so re-fetch before comparing against the fresh
+        # hash when the contract moved.
         acfs_parse_checksums_content "$fresh_content"
+        local fresh_url="${ACFS_UPSTREAM_URLS[$tool]:-$url}"
         local fresh_expected_sha256="${ACFS_UPSTREAM_SHA256[$tool]:-}"
 
+        if [[ -z "$fresh_url" ]]; then
+            log_error "Fresh checksums.yaml missing URL for '$tool'"
+            return 1
+        fi
         if [[ -z "$fresh_expected_sha256" ]]; then
             log_error "Fresh checksums.yaml missing entry for '$tool'"
             return 1
         fi
 
+        if [[ "$fresh_url" != "$url" ]]; then
+            log_detail "Fresh checksums changed URL for '$tool'; refetching installer..."
+            content_with_sentinel="$(
+                acfs_fetch_url_content "$fresh_url" || exit $?
+                printf '%s' "$sentinel"
+            )" || return 1
+
+            if [[ "$content_with_sentinel" != *"$sentinel" ]]; then
+                log_error "Failed to fetch upstream URL: $fresh_url"
+                return 1
+            fi
+
+            url="$fresh_url"
+            content="${content_with_sentinel%"$sentinel"}"
+            actual_sha256="$(printf '%s' "$content" | acfs_calculate_sha256)" || return 1
+        fi
+        expected_sha256="$fresh_expected_sha256"
+
         # Re-verify with fresh checksum
-        if [[ "$actual_sha256" == "$fresh_expected_sha256" ]]; then
+        if [[ "$actual_sha256" == "$expected_sha256" ]]; then
             log_success "Verified '$tool' with fresh checksums from GitHub API"
             # Note: ACFS_UPSTREAM_SHA256 already updated by acfs_parse_checksums_content above
         else
             # Still doesn't match even with fresh checksums - this is a real problem
             log_error "Security error: checksum mismatch for '$tool' (verified with fresh checksums)"
             log_detail "URL: $url"
-            log_detail "Expected (fresh): $fresh_expected_sha256"
+            log_detail "Expected (fresh): $expected_sha256"
             log_detail "Actual:           $actual_sha256"
             log_error "Refusing to execute unverified installer script."
             log_error "This could indicate:"

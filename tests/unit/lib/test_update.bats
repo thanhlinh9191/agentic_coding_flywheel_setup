@@ -1614,6 +1614,71 @@ EOF
     assert_output --partial "declare -a"
 }
 
+@test "install.sh verifier refetches installer when fresh checksums change URL" {
+    local installer="$PROJECT_ROOT/install.sh"
+    local old_url="https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/install.sh"
+    local fresh_url="https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/main/install.sh"
+    local old_content='old python installer'
+    local rust_installer_body='new rust installer'
+    local stale_sha="1111111111111111111111111111111111111111111111111111111111111111"
+    local fresh_sha=""
+    local ran_content="$BATS_TEST_TMPDIR/ran-installer"
+    local ran_args="$BATS_TEST_TMPDIR/ran-args"
+
+    fresh_sha="$(printf '%s' "$rust_installer_body" | sha256sum | awk '{print $1}')"
+
+    eval "$(sed -n '/^acfs_run_verified_upstream_script_as_target_with_env()/,/^}$/p' "$installer")"
+
+    declare -gA ACFS_UPSTREAM_URLS=([mcp_agent_mail]="$old_url")
+    declare -gA ACFS_UPSTREAM_SHA256=([mcp_agent_mail]="$stale_sha")
+
+    acfs_load_upstream_checksums() {
+        return 0
+    }
+
+    acfs_fetch_url_content() {
+        case "${1:-}" in
+            "$old_url") printf '%s' "$old_content" ;;
+            "$fresh_url") printf '%s' "$rust_installer_body" ;;
+            *) return 1 ;;
+        esac
+    }
+
+    acfs_calculate_sha256() {
+        sha256sum | awk '{print $1}'
+    }
+
+    acfs_fetch_fresh_checksums_via_api() {
+        cat <<EOF
+installers:
+  mcp_agent_mail:
+    url: "$fresh_url"
+    sha256: "$fresh_sha"
+EOF
+    }
+
+    acfs_parse_checksums_content() {
+        ACFS_UPSTREAM_URLS[mcp_agent_mail]="$fresh_url"
+        ACFS_UPSTREAM_SHA256[mcp_agent_mail]="$fresh_sha"
+    }
+
+    log_detail() { :; }
+    log_error() { :; }
+    log_success() { :; }
+    log_fatal() { return 1; }
+
+    run_as_target() {
+        printf '%s\n' "$*" > "$ran_args"
+        cat > "$ran_content"
+    }
+
+    run acfs_run_verified_upstream_script_as_target_with_env mcp_agent_mail bash "" --dest "$HOME/mcp_agent_mail" --yes
+    assert_success
+    assert_output ""
+    [[ "$(cat "$ran_content")" == "$rust_installer_body" ]]
+    [[ "$(cat "$ran_args")" == "bash -s -- --dest $HOME/mcp_agent_mail --yes" ]]
+}
+
 @test "update_require_security: does not probe bogus repo path when ACFS_REPO_ROOT is unset" {
     export ACFS_BIN_DIR="$HOME/missing-bin"
     export ACFS_HOME="$HOME/missing-home"
