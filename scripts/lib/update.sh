@@ -2624,6 +2624,7 @@ sync_acfs_zprofile_paths() {
 # or checksums.yaml — the self-update pulls into the git repo but the
 # deployed copies at ~/.acfs/ remain stale.
 sync_acfs_deployed() {
+    local source_ref="${1:-}"
     local acfs_home=""
     acfs_home="$(update_runtime_acfs_home 2>/dev/null || true)"
     [[ -n "$acfs_home" ]] || return 0
@@ -2640,6 +2641,77 @@ sync_acfs_deployed() {
 
         [[ -d "$deployed_root/.git" ]] || return 1
         git -C "$deployed_root" ls-files --error-unmatch -- "$deployed_rel" >/dev/null 2>&1
+    }
+
+    _acfs_deployed_source_mode() {
+        local repo_rel="$1"
+
+        [[ -n "$source_ref" ]] || return 0
+        git -C "$ACFS_REPO_ROOT" ls-tree "$source_ref" -- "$repo_rel" 2>/dev/null | awk 'NR == 1 { print $1 }'
+    }
+
+    local synced=0
+    _acfs_sync_deployed_file() {
+        local repo_rel="$1"
+        local deployed_rel="$2"
+        local deployed_file="$acfs_home/$deployed_rel"
+        local source_file=""
+        local source_tmp=""
+        local source_label="$repo_rel"
+        local source_mode=""
+
+        if _acfs_deployed_path_is_git_tracked "$acfs_home" "$deployed_rel"; then
+            log_to_file "Skipped syncing $source_label -> $deployed_file (target is git-managed)"
+            return 0
+        fi
+
+        if [[ -n "$source_ref" ]]; then
+            source_tmp="$(mktemp "${TMPDIR:-/tmp}/acfs-deploy-sync.XXXXXX" 2>/dev/null)" || return 0
+            if ! git -C "$ACFS_REPO_ROOT" show "${source_ref}:${repo_rel}" > "$source_tmp" 2>/dev/null; then
+                rm -f "$source_tmp" 2>/dev/null || true
+                return 0
+            fi
+            source_file="$source_tmp"
+            source_label="${source_ref}:${repo_rel}"
+            source_mode="$(_acfs_deployed_source_mode "$repo_rel")"
+        else
+            source_file="$ACFS_REPO_ROOT/$repo_rel"
+            [[ -f "$source_file" ]] || return 0
+        fi
+
+        # Skip if identical
+        if [[ -f "$deployed_file" ]] && cmp -s "$source_file" "$deployed_file"; then
+            if [[ -n "$source_tmp" ]]; then
+                rm -f "$source_tmp" 2>/dev/null || true
+            fi
+            return 0
+        fi
+
+        if [[ "${DRY_RUN:-false}" == "true" ]]; then
+            log_to_file "Would sync $source_label -> $deployed_file"
+            synced=$((synced + 1))
+            if [[ -n "$source_tmp" ]]; then
+                rm -f "$source_tmp" 2>/dev/null || true
+            fi
+            return 0
+        fi
+
+        mkdir -p "$(dirname "$deployed_file")"
+        cp "$source_file" "$deployed_file"
+        if [[ -n "$source_ref" ]]; then
+            case "$source_mode" in
+                100755) chmod 755 "$deployed_file" ;;
+                100644) chmod 644 "$deployed_file" ;;
+            esac
+        else
+            chmod --reference="$source_file" "$deployed_file" 2>/dev/null || true
+        fi
+        log_to_file "Synced $source_label -> $deployed_file"
+        synced=$((synced + 1))
+
+        if [[ -n "$source_tmp" ]]; then
+            rm -f "$source_tmp" 2>/dev/null || true
+        fi
     }
 
     local -a file_pairs=(
@@ -2672,68 +2744,34 @@ sync_acfs_deployed() {
         "VERSION:VERSION"
     )
 
-    local synced=0
     for pair in "${file_pairs[@]}"; do
         local repo_rel="${pair%%:*}"
         local deployed_rel="${pair##*:}"
-        local repo_file="$ACFS_REPO_ROOT/$repo_rel"
-        local deployed_file="$acfs_home/$deployed_rel"
-
-        [[ -f "$repo_file" ]] || continue
-        if _acfs_deployed_path_is_git_tracked "$acfs_home" "$deployed_rel"; then
-            log_to_file "Skipped syncing $repo_rel -> $deployed_file (target is git-managed)"
-            continue
-        fi
-
-        # Skip if identical
-        if [[ -f "$deployed_file" ]] && cmp -s "$repo_file" "$deployed_file"; then
-            continue
-        fi
-
-        if [[ "${DRY_RUN:-false}" == "true" ]]; then
-            log_to_file "Would sync $repo_rel -> $deployed_file"
-            synced=$((synced + 1))
-            continue
-        fi
-
-        mkdir -p "$(dirname "$deployed_file")"
-        cp "$repo_file" "$deployed_file"
-        chmod --reference="$repo_file" "$deployed_file" 2>/dev/null || true
-        log_to_file "Synced $repo_rel -> $deployed_file"
-        synced=$((synced + 1))
+        _acfs_sync_deployed_file "$repo_rel" "$deployed_rel"
     done
 
     local generated_script=""
     local generated_name=""
-    for generated_script in "$ACFS_REPO_ROOT/scripts/generated/"*.sh; do
-        [[ -f "$generated_script" ]] || continue
-        generated_name="$(basename "$generated_script")"
-        local deployed_generated="$acfs_home/scripts/generated/$generated_name"
-
-        if _acfs_deployed_path_is_git_tracked "$acfs_home" "scripts/generated/$generated_name"; then
-            log_to_file "Skipped syncing scripts/generated/$generated_name -> $deployed_generated (target is git-managed)"
-            continue
-        fi
-
-        if [[ -f "$deployed_generated" ]] && cmp -s "$generated_script" "$deployed_generated"; then
-            continue
-        fi
-
-        if [[ "${DRY_RUN:-false}" == "true" ]]; then
-            log_to_file "Would sync scripts/generated/$generated_name -> $deployed_generated"
-            synced=$((synced + 1))
-            continue
-        fi
-
-        mkdir -p "$(dirname "$deployed_generated")"
-        cp "$generated_script" "$deployed_generated"
-        chmod --reference="$generated_script" "$deployed_generated" 2>/dev/null || true
-        log_to_file "Synced scripts/generated/$generated_name -> $deployed_generated"
-        synced=$((synced + 1))
-    done
+    if [[ -n "$source_ref" ]]; then
+        while IFS= read -r generated_script; do
+            [[ "$generated_script" == scripts/generated/*.sh ]] || continue
+            generated_name="$(basename "$generated_script")"
+            _acfs_sync_deployed_file "$generated_script" "scripts/generated/$generated_name"
+        done < <(git -C "$ACFS_REPO_ROOT" ls-tree -r --name-only "$source_ref" -- scripts/generated 2>/dev/null || true)
+    else
+        for generated_script in "$ACFS_REPO_ROOT/scripts/generated/"*.sh; do
+            [[ -f "$generated_script" ]] || continue
+            generated_name="$(basename "$generated_script")"
+            _acfs_sync_deployed_file "scripts/generated/$generated_name" "scripts/generated/$generated_name"
+        done
+    fi
 
     if [[ $synced -gt 0 ]]; then
-        log_to_file "Synced $synced file(s) from repo to $acfs_home"
+        if [[ -n "$source_ref" ]]; then
+            log_to_file "Synced $synced file(s) from $source_ref to $acfs_home"
+        else
+            log_to_file "Synced $synced file(s) from repo to $acfs_home"
+        fi
     fi
 }
 
@@ -3470,6 +3508,7 @@ _acfs_refresh_security_from_fetched_remote() {
     # branch the install is checked out on (main or master — the two are
     # maintained as parallel refs with identical SHAs).
     local _sec_remote_branch="${1:-main}"
+    local _sec_sync_deployed_from_remote="${2:-false}"
     local _sec_files_refreshed=false
     local _sec_relpath
     for _sec_relpath in checksums.yaml scripts/lib/security.sh; do
@@ -3488,8 +3527,12 @@ _acfs_refresh_security_from_fetched_remote() {
     if [[ "$_sec_files_refreshed" == "true" ]]; then
         log_item "ok" "ACFS checksums" "refreshed from remote"
         update_refresh_installed_security
-        sync_acfs_deployed
         sync_acfs_global_wrapper
+    fi
+    if [[ "$_sec_sync_deployed_from_remote" == "true" ]]; then
+        sync_acfs_deployed "origin/${_sec_remote_branch}"
+    elif [[ "$_sec_files_refreshed" == "true" ]]; then
+        sync_acfs_deployed
     fi
 }
 
@@ -3848,18 +3891,18 @@ update_acfs_self() {
     # git pull --ff-only never touches untracked files.
     #
     # Even when we can't pull, we STILL extract security-critical files
-    # (checksums.yaml, security.sh) from the fetched remote so that
-    # verified-installer checks use fresh checksums and URLs. Without this,
-    # machines with local modifications run with stale checksums indefinitely,
-    # causing constant checksum-mismatch failures for Dicklesworthstone tools.
+    # (checksums.yaml, security.sh) from the fetched remote and sync deployed
+    # runtime helpers from that fetched ref. Without this, machines with local
+    # modifications run with stale checksums or stale ~/.acfs scripts
+    # indefinitely, causing constant installer failures.
     local self_update_completed=false
     if [[ -n "$(git -C "$ACFS_REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
         if _acfs_try_upstream_derived_dirty_fast_forward "$current_branch" "$local_head" "$remote_head" "$remote_branch"; then
             self_update_completed=true
         else
             log_item "warn" "ACFS self-update" "tracked files have local modifications; skipping full pull"
-            log_to_file "Self-update skipped: working tree has tracked modifications — refreshing security files only"
-            _acfs_refresh_security_from_fetched_remote "$remote_branch"
+            log_to_file "Self-update skipped: working tree has tracked modifications — refreshing fetched runtime files"
+            _acfs_refresh_security_from_fetched_remote "$remote_branch" true
             return 0
         fi
     fi
@@ -3868,9 +3911,9 @@ update_acfs_self() {
         # Pull updates
         log_to_file "Pulling updates..."
         if ! git -C "$ACFS_REPO_ROOT" pull --ff-only origin "$remote_branch" 2>/dev/null; then
-            log_item "warn" "ACFS self-update" "ff-only pull failed (branch divergence?); refreshing security files"
-            log_to_file "Self-update skipped: git pull --ff-only failed — refreshing security files only"
-            _acfs_refresh_security_from_fetched_remote "$remote_branch"
+            log_item "warn" "ACFS self-update" "ff-only pull failed (branch divergence?); refreshing fetched runtime files"
+            log_to_file "Self-update skipped: git pull --ff-only failed — refreshing fetched runtime files"
+            _acfs_refresh_security_from_fetched_remote "$remote_branch" true
             return 0
         fi
     fi
