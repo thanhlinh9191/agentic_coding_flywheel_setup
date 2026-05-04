@@ -2414,7 +2414,7 @@ modules:
       tool: fsfs
       runner: bash
       args: ["--easy-mode"]
-      url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/main/install.sh"
+      url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/refs/heads/main/install.sh"
     install: []
     verify:
       - fsfs version || fsfs --help

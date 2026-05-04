@@ -1823,7 +1823,7 @@ finds too many results and you need semantic narrowing.`,
       "fsfs status                  # Index health",
     ],
     installCommand:
-      'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/main/install.sh" | bash -s -- --easy-mode --from-source --lite',
+      'curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/refs/heads/main/install.sh" | bash -s -- --easy-mode --from-source --lite',
     language: "Rust",
   },
   {

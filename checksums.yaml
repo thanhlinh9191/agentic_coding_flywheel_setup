@@ -1,4 +1,4 @@
-# checksums.yaml - Auto-generated 2026-05-04T19:36:20+00:00
+# checksums.yaml - Auto-generated 2026-05-04T16:35:10-04:00
 # Run: ./scripts/lib/security.sh --update-checksums
 
 installers:
@@ -63,8 +63,8 @@ installers:
     sha256: "c41b9fea22c653ad86dbb824d70c65de00d7fdfd2cc59bc4293b7de648001bb0"
 
   fsfs:
-    url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/main/install.sh"
-    sha256: "320fdb93c10a3fd22b3c9f00a4a30e580a7c0effeb69cfb01e86c80b9ab8ac70"
+    url: "https://raw.githubusercontent.com/Dicklesworthstone/frankensearch/refs/heads/main/install.sh"
+    sha256: "7b245d3b03487cf5ef81f5872ca18a27b7f94c615fa047c31b4cc8851d4aec16"
 
   gemini_patch:
     url: "https://raw.githubusercontent.com/Dicklesworthstone/misc_coding_agent_tips_and_scripts/main/fix-gemini-cli-ebadf-crash.sh"
@@ -165,4 +165,3 @@ installers:
   zoxide:
     url: "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh"
     sha256: "0c25aed6cce9d56ee0596c9a5df8cbe99ffd0f7a7054de0262234dd268b61404"
-
