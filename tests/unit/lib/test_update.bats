@@ -619,11 +619,141 @@ EOF
 @test "refresh_checksums: uses trusted update_curl helper" {
     local update="$PROJECT_ROOT/scripts/lib/update.sh"
 
-    run grep -F 'if update_curl --connect-timeout 5 --max-time 30 -o "$tmp_checksums" "$CHECKSUMS_URL" 2>/dev/null; then' "$update"
+    run grep -F 'if update_curl \' "$update"
     assert_success
 
-    run grep -F 'curl "${_refresh_curl_args[@]}" -o "$tmp_checksums" "$CHECKSUMS_URL"' "$update"
+    run grep -F 'elif update_curl --connect-timeout 5 --max-time 30 -o "$tmp_checksums" "$raw_url" 2>/dev/null; then' "$update"
+    assert_success
+
+    run grep -F 'curl "${_refresh_curl_args[@]}" -o "$tmp_checksums"' "$update"
     assert_failure
+
+    run grep -F 'CHECKSUMS_URL=' "$update"
+    assert_failure
+}
+
+@test "refresh_checksums: prefers GitHub API over raw CDN" {
+    local runtime_home
+    local calls_file
+    local checksums_file
+    runtime_home="$(create_temp_dir)"
+    calls_file="$BATS_TEST_TMPDIR/refresh-api-calls.log"
+    checksums_file="$runtime_home/.acfs/checksums.yaml"
+
+    mkdir -p "$runtime_home/.acfs"
+    export HOME="$runtime_home"
+    export TARGET_HOME="$runtime_home"
+    unset TARGET_USER
+    export ACFS_HOME="$runtime_home/.acfs"
+    export ACFS_CHECKSUMS_REF="main"
+
+    update_curl() {
+        local output_file=""
+        local url="${*: -1}"
+        local i=1
+
+        while [[ $i -le $# ]]; do
+            if [[ "${!i}" == "-o" ]]; then
+                local next=$((i + 1))
+                output_file="${!next}"
+                break
+            fi
+            ((i += 1))
+        done
+
+        printf '%s\n' "$url" >> "$calls_file"
+        case "$url" in
+            https://api.github.com/repos/*/contents/checksums.yaml?ref=main)
+                cat > "$output_file" <<'EOF'
+installers:
+  mcp_agent_mail:
+    url: "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/refs/heads/main/install.sh"
+    sha256: "2222222222222222222222222222222222222222222222222222222222222222"
+EOF
+                return 0
+                ;;
+            https://raw.githubusercontent.com/*)
+                return 22
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    }
+
+    run refresh_checksums true
+    assert_success
+
+    run grep -F 'api.github.com/repos/Dicklesworthstone/agentic_coding_flywheel_setup/contents/checksums.yaml?ref=main' "$calls_file"
+    assert_success
+
+    run grep -F 'raw.githubusercontent.com' "$calls_file"
+    assert_failure
+
+    run grep -F 'mcp_agent_mail_rust/refs/heads/main/install.sh' "$checksums_file"
+    assert_success
+}
+
+@test "refresh_checksums: cache-busts raw fallback when GitHub API fails" {
+    local runtime_home
+    local calls_file
+    local checksums_file
+    runtime_home="$(create_temp_dir)"
+    calls_file="$BATS_TEST_TMPDIR/refresh-raw-calls.log"
+    checksums_file="$runtime_home/.acfs/checksums.yaml"
+
+    mkdir -p "$runtime_home/.acfs"
+    export HOME="$runtime_home"
+    export TARGET_HOME="$runtime_home"
+    unset TARGET_USER
+    export ACFS_HOME="$runtime_home/.acfs"
+    export ACFS_CHECKSUMS_REF="feature/ref"
+
+    update_curl() {
+        local output_file=""
+        local url="${*: -1}"
+        local i=1
+
+        while [[ $i -le $# ]]; do
+            if [[ "${!i}" == "-o" ]]; then
+                local next=$((i + 1))
+                output_file="${!next}"
+                break
+            fi
+            ((i += 1))
+        done
+
+        printf '%s\n' "$url" >> "$calls_file"
+        case "$url" in
+            https://api.github.com/*)
+                return 22
+                ;;
+            https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/feature/ref/checksums.yaml?cb=*)
+                cat > "$output_file" <<'EOF'
+installers:
+  mcp_agent_mail:
+    url: "https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail_rust/refs/heads/main/install.sh"
+    sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+EOF
+                return 0
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    }
+
+    run refresh_checksums true
+    assert_success
+
+    run grep -F 'api.github.com/repos/Dicklesworthstone/agentic_coding_flywheel_setup/contents/checksums.yaml?ref=feature/ref' "$calls_file"
+    assert_success
+
+    run grep -E 'raw.githubusercontent.com/.*/feature/ref/checksums.yaml\?cb=[0-9]+' "$calls_file"
+    assert_success
+
+    run grep -F '3333333333333333333333333333333333333333333333333333333333333333' "$checksums_file"
+    assert_success
 }
 
 @test "self-update hash comparisons use trusted update_sha256_file helper" {

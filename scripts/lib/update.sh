@@ -2774,7 +2774,6 @@ sync_acfs_global_wrapper() {
 # Checksums Refresh (Auto-update from GitHub)
 # ============================================================
 
-CHECKSUMS_URL="https://raw.githubusercontent.com/${ACFS_REPO_OWNER}/${ACFS_REPO_NAME}/${ACFS_CHECKSUMS_REF}/checksums.yaml"
 CHECKSUMS_LOCAL="${ACFS_HOME:-$HOME/.acfs}/checksums.yaml"
 
 update_resolve_checksums_file() {
@@ -2878,6 +2877,10 @@ update_sync_known_installer_urls_from_checksums() {
 refresh_checksums() {
     local quiet="${1:-false}"
     local checksums_local=""
+    local checksums_ref="${ACFS_CHECKSUMS_REF:-main}"
+    local api_url="https://api.github.com/repos/${ACFS_REPO_OWNER}/${ACFS_REPO_NAME}/contents/checksums.yaml?ref=${checksums_ref}"
+    local raw_url="https://raw.githubusercontent.com/${ACFS_REPO_OWNER}/${ACFS_REPO_NAME}/${checksums_ref}/checksums.yaml?cb=$(date +%s)"
+    local fetched_source=""
 
     checksums_local="$(update_runtime_acfs_home 2>/dev/null || true)"
     if [[ -z "$checksums_local" ]]; then
@@ -2898,32 +2901,42 @@ refresh_checksums() {
         return 1
     fi
 
-    if update_curl --connect-timeout 5 --max-time 30 -o "$tmp_checksums" "$CHECKSUMS_URL" 2>/dev/null; then
-        # Validate it looks like a checksums file
-        if grep -q "^installers:" "$tmp_checksums" 2>/dev/null; then
-            if mv "$tmp_checksums" "$checksums_local" 2>/dev/null; then
-                chmod 644 "$checksums_local" 2>/dev/null || true  # Ensure readable permissions
-                if [[ "$quiet" != "true" ]]; then
-                    log_item "ok" "checksums refresh" "synced from GitHub"
-                fi
-                log_to_file "Refreshed checksums.yaml from $CHECKSUMS_URL"
-                return 0
-            else
-                rm -f "$tmp_checksums"
-                [[ "$quiet" != "true" ]] && log_item "warn" "checksums refresh" "failed to install, using cached"
-                log_to_file "Checksums refresh failed: mv failed"
-                return 1
-            fi
-        else
-            rm -f "$tmp_checksums"
-            [[ "$quiet" != "true" ]] && log_item "warn" "checksums refresh" "invalid format, using cached"
-            log_to_file "Checksums refresh failed: invalid format"
-            return 1
-        fi
+    if update_curl \
+        --connect-timeout 5 \
+        --max-time 30 \
+        -H "Accept: application/vnd.github.raw" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        -o "$tmp_checksums" \
+        "$api_url" 2>/dev/null; then
+        fetched_source="$api_url"
+    elif update_curl --connect-timeout 5 --max-time 30 -o "$tmp_checksums" "$raw_url" 2>/dev/null; then
+        fetched_source="$raw_url"
     else
         rm -f "$tmp_checksums"
         [[ "$quiet" != "true" ]] && log_item "warn" "checksums refresh" "network error, using cached"
         log_to_file "Checksums refresh failed: network error"
+        return 1
+    fi
+
+    # Validate it looks like a checksums file.
+    if grep -q "^installers:" "$tmp_checksums" 2>/dev/null; then
+        if mv "$tmp_checksums" "$checksums_local" 2>/dev/null; then
+            chmod 644 "$checksums_local" 2>/dev/null || true  # Ensure readable permissions
+            if [[ "$quiet" != "true" ]]; then
+                log_item "ok" "checksums refresh" "synced from GitHub"
+            fi
+            log_to_file "Refreshed checksums.yaml from $fetched_source"
+            return 0
+        else
+            rm -f "$tmp_checksums"
+            [[ "$quiet" != "true" ]] && log_item "warn" "checksums refresh" "failed to install, using cached"
+            log_to_file "Checksums refresh failed: mv failed"
+            return 1
+        fi
+    else
+        rm -f "$tmp_checksums"
+        [[ "$quiet" != "true" ]] && log_item "warn" "checksums refresh" "invalid format, using cached"
+        log_to_file "Checksums refresh failed: invalid format"
         return 1
     fi
 }
