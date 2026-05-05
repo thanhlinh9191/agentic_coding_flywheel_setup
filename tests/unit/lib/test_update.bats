@@ -5115,6 +5115,25 @@ EOF_DASHBOARD_SERVE
     [[ "$output" != *"poisoned-user@"* ]]
 }
 
+@test "dashboard validate_port treats numeric input as decimal" {
+    local dashboard="$PROJECT_ROOT/scripts/lib/dashboard.sh"
+
+    run bash -c '
+        source "$1"
+        set -euo pipefail
+        validate_port 8
+        validate_port 08
+        validate_port 00080
+        ! validate_port 0
+        ! validate_port 00000
+        ! validate_port 65536
+        ! validate_port 999999
+        ! validate_port abc
+    ' _ "$dashboard"
+
+    assert_success
+}
+
 @test "dashboard generate failure clears cleanup RETURN trap under set -u" {
     local acfs_home
     local fake_info

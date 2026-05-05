@@ -715,11 +715,19 @@ find_info_script() {
 
 validate_port() {
     local port="${1:-}"
+    local port_num=0
+
     if [[ ! "$port" =~ ^[0-9]+$ ]]; then
         return 1
     fi
 
-    (( port >= 1 && port <= 65535 ))
+    while [[ "${#port}" -gt 1 && "$port" == 0* ]]; do
+        port="${port#0}"
+    done
+    [[ "${#port}" -le 5 ]] || return 1
+
+    port_num=$((10#$port))
+    (( port_num >= 1 && port_num <= 65535 ))
 }
 
 dashboard_generate() {
