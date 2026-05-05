@@ -244,6 +244,23 @@ stub_acfs_curl_response() {
     assert_success
 }
 
+@test "acfs_download_to_file: treats root-level output parent as slash" {
+    local recorded_dir="$BATS_TEST_TMPDIR/security-recorded-output-dir"
+
+    acfs_security_mkdir_p() {
+        printf '%s' "$1" > "$recorded_dir"
+        [[ "$1" == "/" ]]
+    }
+
+    acfs_curl() {
+        return 0
+    }
+
+    run acfs_download_to_file "https://example.com/install.sh" "/acfs-root-output" "root-target"
+    assert_success
+    assert_equal "$(cat "$recorded_dir")" "/"
+}
+
 @test "calculate_file_sha256: ignores shell function sha256sum" {
     local security_lib="$PROJECT_ROOT/scripts/lib/security.sh"
     local probe_file="${BATS_TEST_TMPDIR:-/tmp}/acfs-sha-poison-probe"
@@ -264,6 +281,132 @@ stub_acfs_curl_response() {
     ' _ "$probe_file" "$security_lib"
 
     assert_success
+}
+
+@test "verify_checksum: emits verified bytes with trusted cat and mktemp" {
+    local security_lib="$PROJECT_ROOT/scripts/lib/security.sh"
+    local fake_bin="$BATS_TEST_TMPDIR/security-fake-bin"
+    local marker_dir="$BATS_TEST_TMPDIR/security-markers"
+    local probe_file="$BATS_TEST_TMPDIR/security-expected-content"
+
+    mkdir -p "$fake_bin" "$marker_dir"
+    for tool in cat mktemp realpath; do
+        cat > "$fake_bin/$tool" <<EOF
+#!/usr/bin/env bash
+: > "$marker_dir/$tool"
+printf 'poisoned-%s' "$tool"
+exit 0
+EOF
+        chmod +x "$fake_bin/$tool"
+    done
+
+    run env PATH="$fake_bin:/usr/bin:/bin" /usr/bin/bash -s -- "$security_lib" "$probe_file" "$marker_dir" <<'EOF_TRUSTED_CAT'
+set -euo pipefail
+security_lib="$1"
+probe_file="$2"
+marker_dir="$3"
+content='printf "trusted installer\n"'
+
+# shellcheck source=/dev/null
+source "$security_lib"
+
+acfs_download_to_file() {
+    printf '%s' "$content" > "$2"
+}
+
+printf '%s' "$content" > "$probe_file"
+expected="$(calculate_file_sha256 "$probe_file")"
+actual="$(verify_checksum "https://example.com/install.sh" "$expected" "test" 2>/dev/null)"
+
+[[ "$actual" == "$content" ]]
+[[ ! -e "$marker_dir/cat" ]]
+[[ ! -e "$marker_dir/mktemp" ]]
+[[ ! -e "$marker_dir/realpath" ]]
+EOF_TRUSTED_CAT
+
+    assert_success
+}
+
+@test "fetch_and_run: executes verified installer with trusted bash" {
+    local security_lib="$PROJECT_ROOT/scripts/lib/security.sh"
+    local fake_bin="$BATS_TEST_TMPDIR/security-fake-bash-bin"
+    local marker="$BATS_TEST_TMPDIR/fake-bash-used"
+    local probe_file="$BATS_TEST_TMPDIR/security-fetch-run-content"
+
+    mkdir -p "$fake_bin"
+    cat > "$fake_bin/bash" <<EOF
+#!/usr/bin/bash
+: > "$marker"
+printf 'poisoned bash\n'
+exit 0
+EOF
+    chmod +x "$fake_bin/bash"
+
+    run env PATH="$fake_bin:/usr/bin:/bin" /usr/bin/bash -s -- "$security_lib" "$probe_file" "$marker" <<'EOF_TRUSTED_PIPE_BASH'
+set -euo pipefail
+security_lib="$1"
+probe_file="$2"
+marker="$3"
+content='printf "trusted-run:%s\n" "$1"'
+
+# shellcheck source=/dev/null
+source "$security_lib"
+
+acfs_download_to_file() {
+    printf '%s' "$content" > "$2"
+}
+
+printf '%s' "$content" > "$probe_file"
+expected="$(calculate_file_sha256 "$probe_file")"
+fetch_and_run "https://example.com/install.sh" "$expected" "test" "arg1"
+[[ ! -e "$marker" ]]
+EOF_TRUSTED_PIPE_BASH
+
+    assert_success
+    assert_output --partial "trusted-run:arg1"
+    refute_output --partial "poisoned bash"
+    [[ ! -e "$marker" ]]
+}
+
+@test "fetch_and_run_with_recovery: executes verified file with trusted bash" {
+    local security_lib="$PROJECT_ROOT/scripts/lib/security.sh"
+    local fake_bin="$BATS_TEST_TMPDIR/security-fake-recovery-bin"
+    local marker="$BATS_TEST_TMPDIR/fake-recovery-bash-used"
+    local probe_file="$BATS_TEST_TMPDIR/security-recovery-run-content"
+
+    mkdir -p "$fake_bin"
+    cat > "$fake_bin/bash" <<EOF
+#!/usr/bin/bash
+: > "$marker"
+printf 'poisoned recovery bash\n'
+exit 0
+EOF
+    chmod +x "$fake_bin/bash"
+
+    run env PATH="$fake_bin:/usr/bin:/bin" /usr/bin/bash -s -- "$security_lib" "$probe_file" "$marker" <<'EOF_TRUSTED_FILE_BASH'
+set -euo pipefail
+security_lib="$1"
+probe_file="$2"
+marker="$3"
+content='printf "trusted-recovery:%s\n" "$1"'
+
+# shellcheck source=/dev/null
+source "$security_lib"
+
+acfs_download_to_file() {
+    printf '%s' "$content" > "$2"
+}
+
+printf '%s' "$content" > "$probe_file"
+expected="$(calculate_file_sha256 "$probe_file")"
+fetch_and_run_with_recovery "https://example.com/install.sh" "$expected" "test" "arg2"
+[[ ! -e "$marker" ]]
+EOF_TRUSTED_FILE_BASH
+
+    assert_success
+    assert_output --partial "trusted-recovery:arg2"
+    refute_output --partial "poisoned recovery bash"
+    [[ ! -e "$marker" ]]
 }
 
 @test "load_checksums: parses yaml" {

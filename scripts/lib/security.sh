@@ -237,6 +237,8 @@ acfs_download_to_file() {
 
     if [[ "$output_dir" == "$output_path" ]]; then
         output_dir="."
+    elif [[ -z "$output_dir" ]]; then
+        output_dir="/"
     fi
 
     # Ensure parent dir exists
