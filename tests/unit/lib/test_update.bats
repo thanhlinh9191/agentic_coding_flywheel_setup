@@ -7112,9 +7112,12 @@ EOF
         'install_asset "scripts/lib/logging.sh" "$ACFS_HOME/scripts/lib/logging.sh"'
         'install_asset "scripts/lib/output.sh" "$ACFS_HOME/scripts/lib/output.sh"'
         'install_asset "scripts/lib/gum_ui.sh" "$ACFS_HOME/scripts/lib/gum_ui.sh"'
+        'install_asset "scripts/lib/progress.sh" "$ACFS_HOME/scripts/lib/progress.sh"'
+        'install_asset "scripts/lib/install_helpers.sh" "$ACFS_HOME/scripts/lib/install_helpers.sh"'
         'install_asset "scripts/lib/stack.sh" "$ACFS_HOME/scripts/lib/stack.sh"'
         'install_asset "scripts/lib/contract.sh" "$ACFS_HOME/scripts/lib/contract.sh"'
         'install_asset "scripts/lib/security.sh" "$ACFS_HOME/scripts/lib/security.sh"'
+        'install_asset "scripts/lib/tools.sh" "$ACFS_HOME/scripts/lib/tools.sh"'
         'install_asset "scripts/lib/autofix.sh" "$ACFS_HOME/scripts/lib/autofix.sh"'
         'install_asset "scripts/lib/doctor_fix.sh" "$ACFS_HOME/scripts/lib/doctor_fix.sh"'
         'install_asset "scripts/lib/doctor.sh" "$ACFS_HOME/scripts/lib/doctor.sh"'
@@ -7150,9 +7153,12 @@ EOF
         '"scripts/lib/logging.sh:scripts/lib/logging.sh"'
         '"scripts/lib/output.sh:scripts/lib/output.sh"'
         '"scripts/lib/gum_ui.sh:scripts/lib/gum_ui.sh"'
+        '"scripts/lib/progress.sh:scripts/lib/progress.sh"'
+        '"scripts/lib/install_helpers.sh:scripts/lib/install_helpers.sh"'
         '"scripts/lib/stack.sh:scripts/lib/stack.sh"'
         '"scripts/lib/contract.sh:scripts/lib/contract.sh"'
         '"scripts/lib/security.sh:scripts/lib/security.sh"'
+        '"scripts/lib/tools.sh:scripts/lib/tools.sh"'
         '"scripts/lib/autofix.sh:scripts/lib/autofix.sh"'
         '"scripts/lib/doctor_fix.sh:scripts/lib/doctor_fix.sh"'
         '"scripts/lib/doctor.sh:scripts/lib/doctor.sh"'
@@ -7241,6 +7247,9 @@ EOF
     printf "#!/usr/bin/env bash\nprintf 'generated-runtime\\n'\n" > "$repo_root/scripts/generated/install_stack.sh"
     printf "output-runtime\n" > "$repo_root/scripts/lib/output.sh"
     printf "gum-runtime\n" > "$repo_root/scripts/lib/gum_ui.sh"
+    printf "progress-runtime\n" > "$repo_root/scripts/lib/progress.sh"
+    printf "install-helpers-runtime\n" > "$repo_root/scripts/lib/install_helpers.sh"
+    printf "tools-runtime\n" > "$repo_root/scripts/lib/tools.sh"
     printf "notify-runtime\n" > "$repo_root/scripts/lib/notify.sh"
     printf "newproj-runtime\n" > "$repo_root/scripts/lib/newproj.sh"
     printf "screen-runtime\n" > "$repo_root/scripts/lib/newproj_screens/screen_welcome.sh"
@@ -7267,6 +7276,15 @@ EOF
     run cat "$deployed_home/scripts/lib/gum_ui.sh"
     assert_success
     assert_output "gum-runtime"
+    run cat "$deployed_home/scripts/lib/progress.sh"
+    assert_success
+    assert_output "progress-runtime"
+    run cat "$deployed_home/scripts/lib/install_helpers.sh"
+    assert_success
+    assert_output "install-helpers-runtime"
+    run cat "$deployed_home/scripts/lib/tools.sh"
+    assert_success
+    assert_output "tools-runtime"
     run cat "$deployed_home/scripts/lib/notify.sh"
     assert_success
     assert_output "notify-runtime"
@@ -7287,6 +7305,7 @@ EOF
     [[ -x "$deployed_home/bin/flywheel-update-agents-md" ]]
     [[ -x "$deployed_home/scripts/generated/install_stack.sh" ]]
     [[ -x "$deployed_home/scripts/lib/output.sh" ]]
+    [[ -x "$deployed_home/scripts/lib/install_helpers.sh" ]]
     [[ -x "$deployed_home/scripts/lib/newproj_screens/screen_welcome.sh" ]]
 
     run grep -F "Synced acfs/onboard/lessons/00_welcome.md -> $deployed_home/onboard/lessons/00_welcome.md" "$log_file"

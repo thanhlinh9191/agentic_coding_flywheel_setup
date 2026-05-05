@@ -6738,9 +6738,12 @@ finalize() {
     try_step "Installing logging.sh" install_asset "scripts/lib/logging.sh" "$ACFS_HOME/scripts/lib/logging.sh" || return 1
     try_step "Installing output.sh" install_asset "scripts/lib/output.sh" "$ACFS_HOME/scripts/lib/output.sh" || return 1
     try_step "Installing gum_ui.sh" install_asset "scripts/lib/gum_ui.sh" "$ACFS_HOME/scripts/lib/gum_ui.sh" || return 1
+    try_step "Installing progress.sh" install_asset "scripts/lib/progress.sh" "$ACFS_HOME/scripts/lib/progress.sh" || return 1
+    try_step "Installing install_helpers.sh" install_asset "scripts/lib/install_helpers.sh" "$ACFS_HOME/scripts/lib/install_helpers.sh" || return 1
     try_step "Installing stack.sh" install_asset "scripts/lib/stack.sh" "$ACFS_HOME/scripts/lib/stack.sh" || return 1
     try_step "Installing contract.sh" install_asset "scripts/lib/contract.sh" "$ACFS_HOME/scripts/lib/contract.sh" || return 1
     try_step "Installing security.sh" install_asset "scripts/lib/security.sh" "$ACFS_HOME/scripts/lib/security.sh" || return 1
+    try_step "Installing tools.sh" install_asset "scripts/lib/tools.sh" "$ACFS_HOME/scripts/lib/tools.sh" || return 1
     try_step "Installing autofix.sh" install_asset "scripts/lib/autofix.sh" "$ACFS_HOME/scripts/lib/autofix.sh" || return 1
     try_step "Installing doctor_fix.sh" install_asset "scripts/lib/doctor_fix.sh" "$ACFS_HOME/scripts/lib/doctor_fix.sh" || return 1
     try_step "Installing doctor.sh" install_asset "scripts/lib/doctor.sh" "$ACFS_HOME/scripts/lib/doctor.sh" || return 1
