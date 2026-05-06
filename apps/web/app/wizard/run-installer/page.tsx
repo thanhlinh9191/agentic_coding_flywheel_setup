@@ -192,6 +192,25 @@ export default function RunInstallerPage() {
         </p>
       </div>
 
+      {/* Connected user check */}
+      <AlertCard variant="info" title="Confirm you're SSH'd into your VPS">
+        <div className="space-y-2">
+          <p>
+            Your terminal prompt should look like{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">root@vps:~#</code>
+            {" "}(from Step 6) or{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ubuntu@vps:~$</code>.
+            Both work — the installer detects your user automatically.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <strong>Trouble running as root?</strong> A few VPS images ship with non-standard root
+            shells that interact badly with the installer. If the command below fails immediately
+            or behaves unexpectedly, jump to{" "}
+            <strong>Step 10 (Reconnect as Ubuntu)</strong> first, then come back here and re-run.
+          </p>
+        </div>
+      </AlertCard>
+
       {/* Warning */}
       <AlertCard variant="warning" title="Don't close the terminal">
         Stay connected during installation. If disconnected, <Jargon term="ssh">SSH</Jargon> back in
