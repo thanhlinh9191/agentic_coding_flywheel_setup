@@ -205,11 +205,11 @@ export default function RunInstallerPage() {
           <p className="text-sm text-muted-foreground">
             <strong>Trouble running as root?</strong> A few VPS images don&apos;t play well with the
             installer under the root shell. If the command below fails immediately or exits without
-            output, try opening a fresh SSH session as a non-root user with sudo (most VPS providers
-            pre-create one named{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ubuntu</code> or{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">admin</code>) using
-            your provider&apos;s password, then re-run the command from there.
+            output, switch to the{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ubuntu</code>{" "}
+            user from your current root session with{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">su - ubuntu</code>{" "}
+            (no password needed — root can switch to any user) and re-run the command from there.
           </p>
         </div>
       </AlertCard>
@@ -235,6 +235,8 @@ export default function RunInstallerPage() {
             If you connected to root with only a password, finish the install and follow the red SSH-key command
             in the final summary before reconnecting as{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{effectiveSSHUsername}</code>.
+            If the same public key appears more than once from earlier setup attempts, ACFS keeps exact
+            duplicates from being copied again.
           </p>
         </div>
       </AlertCard>
