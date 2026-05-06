@@ -2755,6 +2755,10 @@ install_checksums_yaml() {
             return 1
         }
     }
+    if ! ( acfs_parse_checksums_content "$content" && acfs_validate_upstream_checksums ); then
+        log_error "Fetched checksums.yaml from ref '${ACFS_CHECKSUMS_REF}' failed validation"
+        return 1
+    fi
 
     local dest_dir
     dest_dir="$(dirname "$dest_path")"
@@ -3228,6 +3232,25 @@ acfs_parse_checksums_content() {
     return 0
 }
 
+acfs_required_upstream_tools() {
+    printf '%s\n' \
+        atuin bun bv caam cass claude cm dcg gemini_patch mcp_agent_mail ntm ohmyzsh ru rust slb ubs uv zoxide
+}
+
+acfs_validate_upstream_checksums() {
+    local missing_required_tools=false
+    local tool
+
+    while IFS= read -r tool; do
+        if [[ -z "${ACFS_UPSTREAM_URLS[$tool]:-}" ]] || [[ -z "${ACFS_UPSTREAM_SHA256[$tool]:-}" ]]; then
+            log_error "checksums.yaml missing entry for '$tool'"
+            missing_required_tools=true
+        fi
+    done < <(acfs_required_upstream_tools)
+
+    [[ "$missing_required_tools" != "true" ]]
+}
+
 acfs_load_upstream_checksums() {
     if [[ "$ACFS_UPSTREAM_LOADED" == "true" ]]; then
         return 0
@@ -3279,18 +3302,7 @@ acfs_load_upstream_checksums() {
         return 1
     fi
 
-    local required_tools=(
-        atuin bun bv caam cass claude cm dcg gemini_patch mcp_agent_mail ntm ohmyzsh ru rust slb ubs uv zoxide
-    )
-    local missing_required_tools=false
-    local tool
-    for tool in "${required_tools[@]}"; do
-        if [[ -z "${ACFS_UPSTREAM_URLS[$tool]:-}" ]] || [[ -z "${ACFS_UPSTREAM_SHA256[$tool]:-}" ]]; then
-            log_error "checksums.yaml missing entry for '$tool'"
-            missing_required_tools=true
-        fi
-    done
-    if [[ "$missing_required_tools" == "true" ]]; then
+    if ! acfs_validate_upstream_checksums; then
         return 1
     fi
 

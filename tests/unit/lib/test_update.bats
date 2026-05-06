@@ -1980,6 +1980,83 @@ EOF
     assert_output ""
 }
 
+@test "install.sh install_checksums_yaml rejects malformed dedicated-ref content" {
+    local installer="$PROJECT_ROOT/install.sh"
+    local dest="$BATS_TEST_TMPDIR/checksums.yaml"
+
+    eval "$(sed -n '/^install_checksums_yaml()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_parse_checksums_content()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_required_upstream_tools()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_validate_upstream_checksums()/,/^}$/p' "$installer")"
+
+    export ACFS_CHECKSUMS_REF="main"
+    export ACFS_REF_INPUT="older-install-ref"
+    export ACFS_CHECKSUMS_RAW="https://raw.githubusercontent.com/example/acfs/main"
+    declare -gA ACFS_UPSTREAM_URLS=()
+    declare -gA ACFS_UPSTREAM_SHA256=()
+
+    acfs_fetch_fresh_checksums_via_api() {
+        cat <<'EOF'
+# Superficially plausible, but not valid installer checksum metadata.
+installers:
+  atuin:
+    url: https://example.com/atuin.sh
+    sha256: "not-a-sha"
+EOF
+    }
+    acfs_fetch_url_content() { return 1; }
+    log_error() { printf '%s\n' "$*" >&2; }
+
+    run install_checksums_yaml "$dest"
+    assert_failure
+    assert_output --partial "Fetched checksums.yaml from ref 'main' failed validation"
+    [[ ! -e "$dest" ]]
+}
+
+@test "install.sh install_checksums_yaml writes valid dedicated-ref content" {
+    local installer="$PROJECT_ROOT/install.sh"
+    local dest="$BATS_TEST_TMPDIR/checksums.yaml"
+
+    eval "$(sed -n '/^install_checksums_yaml()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_parse_checksums_content()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_required_upstream_tools()/,/^}$/p' "$installer")"
+    eval "$(sed -n '/^acfs_validate_upstream_checksums()/,/^}$/p' "$installer")"
+
+    export ACFS_CHECKSUMS_REF="main"
+    export ACFS_REF_INPUT="older-install-ref"
+    export ACFS_CHECKSUMS_RAW="https://raw.githubusercontent.com/example/acfs/main"
+    declare -gA ACFS_UPSTREAM_URLS=()
+    declare -gA ACFS_UPSTREAM_SHA256=()
+
+    acfs_fetch_fresh_checksums_via_api() {
+        local tool
+        local index=1
+        printf 'installers:\n'
+        while IFS= read -r tool; do
+            printf '  %s:\n' "$tool"
+            printf '    url: "https://example.com/%s/install.sh"\n' "$tool"
+            printf '    sha256: "%064d"\n' "$index"
+            index=$((index + 1))
+        done < <(acfs_required_upstream_tools)
+    }
+    acfs_fetch_url_content() { return 1; }
+    acfs_early_sudo_binary_path() { return 1; }
+    acfs_early_system_binary_path() {
+        case "${1:-}" in
+            mkdir) command -v mkdir ;;
+            tee) command -v tee ;;
+            *) return 1 ;;
+        esac
+    }
+    log_error() { printf '%s\n' "$*" >&2; }
+
+    run install_checksums_yaml "$dest"
+    assert_success
+    assert_output ""
+    run grep -F 'mcp_agent_mail:' "$dest"
+    assert_success
+}
+
 @test "install.sh verifier refetches installer when fresh checksums change URL" {
     local installer="$PROJECT_ROOT/install.sh"
     local old_url="https://raw.githubusercontent.com/Dicklesworthstone/mcp_agent_mail/main/install.sh"
