@@ -6,22 +6,35 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! REPO_ROOT="$(git -C "$SCRIPT_DIR/../.." rev-parse --show-toplevel 2>/dev/null)"; then
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 cd "$REPO_ROOT"
 
 echo "=== Auditing git_safety_guard Removal ==="
 echo ""
 
 FOUND=0
+BLUE="${BLUE:-}"
+RED="${RED:-}"
+NC="${NC:-}"
+
+filter_allowed_git_safety_guard_refs() {
+    grep -v '.beads/' |
+        grep -v '^./tests/' |
+        grep -v '^./scripts/tests/' |
+        grep -v 'scripts/lib/update.sh' |
+        grep -v 'CHANGELOG.md'
+}
 
 # Check 1: Literal string matches
 echo "[1/5] Checking for 'git_safety_guard' literal string..."
 # Exclusions:
 #   - update.sh: intentional migration cleanup code
 #   - CHANGELOG.md: historical documentation
-#   - test_git_safety_guard_removal.sh: E2E test script
-#   - audit_git_safety_guard: this audit script
-if grep -rn 'git_safety_guard' --include='*.sh' --include='*.py' --include='*.ts' --include='*.tsx' --include='*.md' --include='*.yaml' --include='*.json' . 2>/dev/null | grep -v '.beads/' | grep -v 'audit_git_safety_guard' | grep -v 'test_git_safety_guard_removal' | grep -v 'scripts/lib/update.sh' | grep -v 'CHANGELOG.md'; then
+#   - tests: fixtures and removal-verification scripts necessarily mention the legacy name
+if grep -rn 'git_safety_guard' --include='*.sh' --include='*.py' --include='*.ts' --include='*.tsx' --include='*.md' --include='*.yaml' --include='*.json' . 2>/dev/null | filter_allowed_git_safety_guard_refs; then
     echo "❌ FOUND: git_safety_guard references"
     FOUND=1
 else
@@ -32,7 +45,7 @@ fi
 echo ""
 echo "[2/5] Checking for 'Git Safety Guard' display name..."
 # Same exclusions as check 1
-if grep -rni 'Git Safety Guard' --include='*.sh' --include='*.py' --include='*.ts' --include='*.tsx' --include='*.md' . 2>/dev/null | grep -v '.beads/' | grep -v 'audit_git_safety_guard' | grep -v 'test_git_safety_guard_removal' | grep -v 'CHANGELOG.md'; then
+if grep -rni 'Git Safety Guard' --include='*.sh' --include='*.py' --include='*.ts' --include='*.tsx' --include='*.md' . 2>/dev/null | filter_allowed_git_safety_guard_refs; then
     echo "❌ FOUND: Git Safety Guard references"
     FOUND=1
 else
@@ -42,7 +55,7 @@ fi
 # Check 3: Python hook file
 echo ""
 echo "[3/5] Checking for git_safety_guard.py file..."
-if find . -name 'git_safety_guard.py' -not -path './.beads/*' 2>/dev/null | grep .; then
+if find . -name 'git_safety_guard.py' -not -path './.beads/*' -not -path './tests/*' -not -path './scripts/tests/*' 2>/dev/null | grep .; then
     echo "❌ FOUND: git_safety_guard.py file exists"
     FOUND=1
 else

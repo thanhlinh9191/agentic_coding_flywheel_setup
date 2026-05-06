@@ -861,6 +861,7 @@ modules:
         #!/bin/bash
         exec "$HOME/.bun/bin/bun" "$HOME/.bun/bin/codex" "$@"
         WRAPPER
+        chmod 0755 "$wrapper_tmp"
         acfs_install_executable_into_primary_bin "$wrapper_tmp" "codex"
     verify:
       - |
@@ -892,6 +893,7 @@ modules:
         #!/bin/bash
         exec "$HOME/.bun/bin/bun" "$HOME/.bun/bin/gemini" "$@"
         WRAPPER
+        chmod 0755 "$wrapper_tmp"
         acfs_install_executable_into_primary_bin "$wrapper_tmp" "gemini"
       # Apply patches (EBADF crash fix, rate-limit retry 3→1000, quota retry)
       - |
@@ -1093,6 +1095,7 @@ modules:
         #!/usr/bin/env bash
         exec "$HOME/.bun/bin/bun" x wrangler@latest "$@"
         WRANGLER_SHIM
+        chmod 0755 "$wrapper_tmp"
         acfs_install_executable_into_primary_bin "$wrapper_tmp" "wrangler"
     verify:
       - wrangler --version
@@ -1505,7 +1508,7 @@ modules:
               systemctl --user restart agent-mail.service >/dev/null 2>&1
             fi
             active_waited=0
-            active_max_wait=10
+            active_max_wait=30
             until systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1; do
               if [[ "$active_waited" -ge "$active_max_wait" ]]; then
                 break
@@ -1535,7 +1538,7 @@ modules:
           }
 
           waited=0
-          max_wait=30
+          max_wait=90
           until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do
             if [[ "$waited" -ge "$max_wait" ]]; then
               echo "Agent Mail service did not become healthy on 127.0.0.1:8765 after ${max_wait}s" >&2

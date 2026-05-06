@@ -3156,8 +3156,23 @@ EOF
     run grep -F '_ACFS_RESOLVED_TARGET_HOME="$(_acfs_resolve_target_home "${TARGET_USER}" "$_ACFS_EXPLICIT_TARGET_HOME" || true)"' "$generated"
     assert_success
 
-    run grep -F 'TARGET_HOME="$_ACFS_EXPLICIT_TARGET_HOME"' "$generated"
-    assert_failure
+    run grep -F 'acfs_generated_target_user_exists() {' "$generated"
+    assert_success
+
+    run grep -F 'acfs_generated_default_home_for_new_user() {' "$generated"
+    assert_success
+
+    run grep -F 'if [[ -z "$_ACFS_RESOLVED_TARGET_HOME" ]] && [[ $EUID -eq 0 ]] && ! acfs_generated_target_user_exists "${TARGET_USER}"; then' "$generated"
+    assert_success
+
+    run grep -F '_ACFS_RESOLVED_TARGET_HOME="$(acfs_generated_default_home_for_new_user "${TARGET_USER}" 2>/dev/null || true)"' "$generated"
+    assert_success
+
+    run grep -F 'if [[ -n "$_ACFS_EXPLICIT_TARGET_HOME" ]] && [[ "$_ACFS_EXPLICIT_TARGET_HOME" == /* ]] && [[ "$_ACFS_EXPLICIT_TARGET_HOME" != "/" ]]; then' "$generated"
+    assert_success
+
+    run grep -F '_ACFS_RESOLVED_TARGET_HOME="$_ACFS_EXPLICIT_TARGET_HOME"' "$generated"
+    assert_success
 
     run grep -F '_ACFS_RESOLVED_TARGET_HOME="$_acfs_current_home"' "$generated"
     assert_success
@@ -12247,4 +12262,134 @@ EOF
     [[ ! -e "$curl_marker" ]]
     [[ ! -e "$current_home/.acfs/checksums.yaml" ]]
     [[ ! -e "$CHECKSUMS_LOCAL" ]]
+}
+
+@test "install.sh: authorized_keys merge subprocess avoids top-level local" {
+    local merge_block=""
+
+    merge_block="$(awk '/try_step "Merging SSH authorized_keys"/,/^        . --/ { print }' "$PROJECT_ROOT/install.sh")"
+
+    [[ -n "$merge_block" ]]
+    [[ "$merge_block" != *"local last_char"* ]]
+    [[ "$merge_block" != *"tr -d ' '"* ]]
+    [[ "$merge_block" == *'last_char=""'* ]]
+    [[ "$merge_block" == *'tr -d " "'* ]]
+    [[ "$merge_block" == *'printf "\n" >> "$dst"'* ]]
+}
+
+@test "fd close helpers do not redirect installer stderr permanently" {
+    run grep -R -n -E 'exec [0-9]+>&- 2>/dev/null|exec \\{[^}]+\\}>&- 2>/dev/null' "$PROJECT_ROOT/install.sh" "$PROJECT_ROOT/scripts/lib" "$PROJECT_ROOT/scripts/tests" "$PROJECT_ROOT/packages/onboard/onboard.sh"
+    assert_failure
+
+    run grep -F '{ exec 200>&-; } 2>/dev/null || true' "$PROJECT_ROOT/scripts/lib/state.sh"
+    assert_success
+
+    run grep -F '{ exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&-; } 2>/dev/null || true' "$PROJECT_ROOT/scripts/lib/logging.sh"
+    assert_success
+
+    run grep -F '{ exec {lock_fd}>&-; } 2>/dev/null || true' "$PROJECT_ROOT/packages/onboard/onboard.sh"
+    assert_success
+}
+
+@test "state.sh: root installs can initialize state before missing target user exists" {
+    run grep -F 'if [[ $EUID -eq 0 ]]; then' "$PROJECT_ROOT/scripts/lib/state.sh"
+    assert_success
+
+    run grep -F 'printf '"'"'/home/%s\n'"'"' "$target_user"' "$PROJECT_ROOT/scripts/lib/state.sh"
+    assert_success
+}
+
+@test "doctor.sh: supplemental manifest checks carry generated helpers into child shell" {
+    run grep -F 'if [[ "$cmd" == *"acfs_generated_"* ]]; then' "$PROJECT_ROOT/scripts/lib/doctor.sh"
+    assert_success
+
+    run grep -F 'cmd="${helper_prelude}"$'\''\n'\''"${cmd}"' "$PROJECT_ROOT/scripts/lib/doctor.sh"
+    assert_success
+
+    run grep -F '""|\#*|test|' "$PROJECT_ROOT/scripts/lib/doctor.sh"
+    assert_success
+}
+
+@test "vm test runner avoids zsh status and dcg pipe alias regressions" {
+    run grep -F 'menu_status=\$?' "$PROJECT_ROOT/tests/vm/test_runner.sh"
+    assert_success
+
+    run grep -F 'dcg_output=\$(dcg test \"git reset --hard\" 2>&1 || true)' "$PROJECT_ROOT/tests/vm/test_runner.sh"
+    assert_success
+
+    run grep -F 'dcg test \"git reset --hard\" | grep' "$PROJECT_ROOT/tests/vm/test_runner.sh"
+    assert_failure
+}
+
+@test "onboard: no-arg noninteractive menu exits with TTY error" {
+    local home_dir
+    home_dir="$(create_temp_dir)"
+    mkdir -p "$home_dir/.acfs"
+
+    run bash -c 'HOME="$1" ACFS_HOME="$1/.acfs" ACFS_PROGRESS_FILE="$1/progress.json" ACFS_LESSONS_DIR="$2/acfs/onboard/lessons" timeout 5s "$2/packages/onboard/onboard.sh" </dev/null' _ "$home_dir" "$PROJECT_ROOT"
+    assert_failure
+    [[ "$status" -eq 1 ]]
+    [[ "$output" == *"Interactive menu requires a TTY"* ]]
+}
+
+@test "git_safety_guard audit falls back when git rejects bind-mount ownership" {
+    run grep -F 'git -C "$SCRIPT_DIR/../.." rev-parse --show-toplevel 2>/dev/null' "$PROJECT_ROOT/scripts/tests/audit_git_safety_guard_removal.sh"
+    assert_success
+
+    run grep -F 'REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"' "$PROJECT_ROOT/scripts/tests/audit_git_safety_guard_removal.sh"
+    assert_success
+}
+
+@test "install.sh: legacy full-stack phase installs beads_rust before beads_viewer" {
+    local br_line
+    local bv_line
+
+    run grep -F 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    br_line="$(grep -n 'Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
+    bv_line="$(grep -n 'Installing Beads Viewer" acfs_run_verified_upstream_script_as_target "bv" "bash"' "$PROJECT_ROOT/install.sh" | head -1 | cut -d: -f1)"
+
+    [[ -n "$br_line" ]]
+    [[ -n "$bv_line" ]]
+    (( br_line < bv_line ))
+}
+
+@test "install.sh: install-wide lock is explicitly released during cleanup" {
+    run grep -F 'acfs_remember_install_lock "$_acfs_lock_fd" "$_acfs_lock_file"' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'acfs_release_install_lock' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'flock -u 199 2>/dev/null || true' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F '{ exec 199>&-; } 2>/dev/null || true' "$PROJECT_ROOT/install.sh"
+    assert_success
+}
+
+@test "Agent Mail readiness waits tolerate slow service startup" {
+    run grep -F 'local am_max_wait=90' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'active_max_wait=30' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'local max_wait=90' "$PROJECT_ROOT/scripts/lib/stack.sh"
+    assert_success
+
+    run grep -F 'max_wait=90' "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+}
+
+@test "new tools E2E reports beads probe setup failures accurately" {
+    run grep -F 'isolated br probe workspace setup failed; see $LOG_FILE' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh"
+    assert_success
+
+    run grep -F 'br binary not found; bv robot probe requires beads_rust' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh"
+    assert_success
+
+    run grep -F 'mktemp failed while creating isolated bv probe workspace' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh"
+    assert_failure
 }

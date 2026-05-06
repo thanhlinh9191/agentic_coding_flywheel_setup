@@ -191,7 +191,9 @@ export default function GenerateSSHKeyPage() {
       {/* Important note */}
       <AlertCard variant="warning" title="Save your public key for later">
         Save this somewhere safe like a notes app. If your VPS was created with password-only access,
-        you may need it for the follow-up SSH key command after installation.
+        you may need it for the follow-up SSH key command after installation. Do not paste the same
+        public key into multiple setup steps; if that already happened, ACFS skips exact duplicate
+        key lines when it copies server keys.
       </AlertCard>
 
       {/* Troubleshooting */}
@@ -422,8 +424,8 @@ export default function GenerateSSHKeyPage() {
 
               <GuideStep number={3} title="Save it somewhere safe">
                 Open a notes app (like Notes on Mac, Notepad on Windows, or any text editor on Linux) and paste your
-                public key there. You&apos;ll need it later when running the installer (not
-                when creating the VPS—we&apos;ll use a password for that).
+                public key there. You may need it later for the follow-up SSH key command after the installer finishes
+                (not when creating the VPS—we&apos;ll use a password for that).
               </GuideStep>
             </div>
           </GuideSection>

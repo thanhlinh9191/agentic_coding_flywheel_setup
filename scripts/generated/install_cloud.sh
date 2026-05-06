@@ -128,6 +128,30 @@ acfs_generated_passwd_home_from_entry() {
     return 1
 }
 
+acfs_generated_target_user_exists() {
+    local user="${1:-}"
+    local id_bin=""
+
+    [[ -n "$user" ]] || return 1
+    id_bin="$(acfs_generated_system_binary_path id 2>/dev/null || true)"
+    [[ -n "$id_bin" ]] || return 1
+    "$id_bin" "$user" >/dev/null 2>&1
+}
+
+acfs_generated_default_home_for_new_user() {
+    local user="${1:-}"
+
+    [[ -n "$user" ]] || return 1
+    [[ "$user" =~ ^[a-z_][a-z0-9._-]*$ ]] || return 1
+
+    if [[ "$user" == "root" ]]; then
+        printf '/root\n'
+        return 0
+    fi
+
+    printf '/home/%s\n' "$user"
+}
+
 # When running a generated installer directly (not sourced by install.sh),
 # set sane defaults and derive ACFS paths from the script location so
 # contract validation passes and local assets are discoverable.
@@ -185,6 +209,13 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
                 unset _acfs_current_user _acfs_current_home
             fi
             unset _acfs_passwd_entry
+        fi
+    fi
+    if [[ -z "$_ACFS_RESOLVED_TARGET_HOME" ]] && [[ $EUID -eq 0 ]] && ! acfs_generated_target_user_exists "${TARGET_USER}"; then
+        if [[ -n "$_ACFS_EXPLICIT_TARGET_HOME" ]] && [[ "$_ACFS_EXPLICIT_TARGET_HOME" == /* ]] && [[ "$_ACFS_EXPLICIT_TARGET_HOME" != "/" ]]; then
+            _ACFS_RESOLVED_TARGET_HOME="$_ACFS_EXPLICIT_TARGET_HOME"
+        else
+            _ACFS_RESOLVED_TARGET_HOME="$(acfs_generated_default_home_for_new_user "${TARGET_USER}" 2>/dev/null || true)"
         fi
     fi
     if [[ -n "$_ACFS_RESOLVED_TARGET_HOME" ]]; then
@@ -391,6 +422,7 @@ cat > "$wrapper_tmp" << 'WRANGLER_SHIM'
 #!/usr/bin/env bash
 exec "$HOME/.bun/bin/bun" x wrangler@latest "$@"
 WRANGLER_SHIM
+chmod 0755 "$wrapper_tmp"
 acfs_install_executable_into_primary_bin "$wrapper_tmp" "wrangler"
 INSTALL_CLOUD_WRANGLER
         then

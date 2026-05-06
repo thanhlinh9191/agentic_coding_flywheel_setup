@@ -12,8 +12,8 @@
 #
 # Strategy:
 #   1. Create a tar.gz archive from the current checkout
-#   2. Serve it via python3 -m http.server
-#   3. Run curl | bash -s -- --yes --dry-run
+#   2. Serve install.sh via python3 -m http.server
+#   3. Run curl | bash -s -- --yes --dry-run with ACFS_TEST_ARCHIVE
 #   4. Verify bootstrap succeeds and dry-run completes
 #
 # Related bugs: #85-#90
@@ -35,7 +35,7 @@ cleanup_test() {
         wait "$HTTP_PID" 2>/dev/null || true
     fi
     if [[ -n "$WORK_DIR" ]]; then
-        rm -rf "$WORK_DIR" 2>/dev/null || true
+        echo "  INFO: Preserved test work dir: $WORK_DIR"
     fi
 }
 trap cleanup_test EXIT
@@ -123,30 +123,24 @@ echo ""
 # ────────────────────────────────────────
 echo "Step 3: Running curl|bash bootstrap with --dry-run..."
 
-# Override ACFS_REPO_OWNER/NAME to point at our local archive
-# The bootstrap_repo_archive function builds the URL:
-#   https://github.com/$OWNER/$NAME/archive/$REF.tar.gz
-# We can't easily intercept that, so instead we test the dry-run path
-# which still exercises detect_environment + library sourcing.
-#
-# For the full bootstrap path, we pass install.sh via stdin (no SCRIPT_DIR)
-# and override ACFS_BOOTSTRAP_DIR to point at our extracted archive.
-
-BOOTSTRAP_DIR="$WORK_DIR/bootstrap"
-mkdir -p "$BOOTSTRAP_DIR"
-tar -xzf "$ARCHIVE_DIR/test.tar.gz" -C "$BOOTSTRAP_DIR" --strip-components=1
-
 LOG_FILE="$WORK_DIR/install.log"
 
-# Run install.sh from stdin (simulates curl|bash) with ACFS_BOOTSTRAP_DIR set
-# to skip the actual download while still exercising the sourcing path.
-ACFS_BOOTSTRAP_DIR="$BOOTSTRAP_DIR" \
-ACFS_CI=true \
-    bash "$ARCHIVE_DIR/install.sh" --yes --dry-run --skip-preflight --skip-ubuntu-upgrade \
-    > "$LOG_FILE" 2>&1 || true
+set +e
+timeout 90s bash -c '
+    set -euo pipefail
+    curl -sf "$1" | ACFS_TEST_MODE=1 ACFS_TEST_ARCHIVE="$2" ACFS_CI=true bash -s -- --yes --dry-run --skip-preflight --skip-ubuntu-upgrade
+' _ "http://localhost:$PORT/install.sh" "$ARCHIVE_DIR/test.tar.gz" > "$LOG_FILE" 2>&1
+INSTALL_STATUS=$?
+set -e
 
-assert_ok "Install script executed without crash" test -f "$LOG_FILE"
-assert_ok "Caller-provided bootstrap dir was not treated as installer-owned cleanup" test -d "$BOOTSTRAP_DIR"
+if [[ "$INSTALL_STATUS" -eq 0 ]]; then
+    echo "  PASS: Install script executed from stdin without crash"
+    ((PASS++)) || true
+else
+    echo "  FAIL: Install script failed from stdin (exit $INSTALL_STATUS)"
+    ((FAIL++)) || true
+fi
+assert_ok "Local bootstrap archive is preserved after test-mode run" test -f "$ARCHIVE_DIR/test.tar.gz"
 echo ""
 
 # ────────────────────────────────────────
@@ -160,6 +154,23 @@ if grep -qi "unbound variable" "$LOG_FILE" 2>/dev/null; then
     ((FAIL++)) || true
 else
     echo "  PASS: No unbound variable errors"
+    ((PASS++)) || true
+fi
+
+if grep -q "Test mode: using local archive" "$LOG_FILE" 2>/dev/null; then
+    echo "  PASS: curl|bash test exercised archive bootstrap"
+    ((PASS++)) || true
+else
+    echo "  FAIL: curl|bash test did not exercise archive bootstrap"
+    ((FAIL++)) || true
+fi
+
+# The test must exercise the real stdin/curl-pipe mode, not a local path.
+if grep -q "SCRIPT_DIR=" "$LOG_FILE" 2>/dev/null; then
+    echo "  FAIL: Unexpected local SCRIPT_DIR path leaked into curl|bash test"
+    ((FAIL++)) || true
+else
+    echo "  PASS: No local SCRIPT_DIR path leaked into output"
     ((PASS++)) || true
 fi
 

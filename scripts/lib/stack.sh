@@ -1477,7 +1477,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
         systemctl --user restart agent-mail.service >/dev/null 2>&1
     fi
     active_waited=0
-    active_max_wait=10
+    active_max_wait=30
     until systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1; do
         if [[ "$active_waited" -ge "$active_max_wait" ]]; then
             break
@@ -1499,7 +1499,7 @@ EOF
 # Wait for the managed Agent Mail service to become healthy.
 _stack_wait_for_agent_mail_health() {
     local waited=0
-    local max_wait=30
+    local max_wait=90
 
     until _stack_agent_mail_healthy && _stack_agent_mail_readiness; do
         if [[ "$waited" -ge "$max_wait" ]]; then

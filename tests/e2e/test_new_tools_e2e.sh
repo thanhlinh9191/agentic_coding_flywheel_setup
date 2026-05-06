@@ -95,12 +95,17 @@ file_details() {
 
 create_beads_probe_workspace() {
     local probe_dir
-    probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/acfs_beads_e2e.XXXXXX")
+    if ! probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/acfs_beads_e2e.XXXXXX" 2>>"$LOG_FILE"); then
+        printf '[%s] [FAIL] [beads_probe] mktemp failed while creating probe workspace\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG_FILE"
+        return 1
+    fi
     if [[ -z "$probe_dir" || ! -d "$probe_dir" ]]; then
+        printf '[%s] [FAIL] [beads_probe] mktemp returned no directory\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG_FILE"
         return 1
     fi
 
     if ! (cd "$probe_dir" && timeout "$TEST_TIMEOUT_SECONDS" br init >/dev/null 2>>"$LOG_FILE"); then
+        printf '[%s] [FAIL] [beads_probe] br init failed in %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$probe_dir" >>"$LOG_FILE"
         return 1
     fi
 
@@ -215,7 +220,7 @@ test_flywheel_tools() {
         local br_probe_dir
         br_probe_dir=$(create_beads_probe_workspace)
         if [[ -z "$br_probe_dir" || ! -d "$br_probe_dir" ]]; then
-            fail "br_list" "mktemp failed while creating isolated br probe workspace"
+            fail "br_list" "isolated br probe workspace setup failed; see $LOG_FILE"
             return 1
         fi
         local br_list_output=""
@@ -655,10 +660,15 @@ test_integration() {
     # Test 4: bv (beads_viewer) works
     log "INFO" "bv" "Testing beads_viewer (bv)..."
     if command -v bv >/dev/null 2>&1; then
+        if ! command -v br >/dev/null 2>&1; then
+            fail "bv_triage" "br binary not found; bv robot probe requires beads_rust"
+            return 1
+        fi
         local bv_probe_dir
+        local bv_output=""
         bv_probe_dir=$(create_beads_probe_workspace)
         if [[ -z "$bv_probe_dir" || ! -d "$bv_probe_dir" ]]; then
-            fail "bv_triage" "mktemp failed while creating isolated bv probe workspace"
+            fail "bv_triage" "isolated bv probe workspace setup failed; see $LOG_FILE"
         elif run_beads_probe_command "$bv_probe_dir" br create "BV E2E probe issue" --type task --priority 4 >/dev/null 2>>"$LOG_FILE" && \
             bv_output=$(run_beads_probe_command "$bv_probe_dir" bv --robot-triage 2>>"$LOG_FILE") && \
             [[ "$bv_output" =~ ^[[:space:]]*\{ ]] && \

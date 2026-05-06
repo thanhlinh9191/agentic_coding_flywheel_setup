@@ -532,8 +532,8 @@ test_upgrade_lock_rejects_contender_without_truncating_pid() {
     fi
 
     if bash -c '
-        exec 197>&- 2>/dev/null || true
-        exec 196>&- 2>/dev/null || true
+        { exec 197>&-; } 2>/dev/null || true
+        { exec 196>&-; } 2>/dev/null || true
         source "$1"
         ACFS_UPGRADE_LOCK="$2"
         ACFS_UPGRADE_LOCK_FD=""

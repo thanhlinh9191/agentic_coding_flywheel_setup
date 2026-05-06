@@ -232,6 +232,8 @@ export ACFS_FORCE_REINSTALL=false
 # install.sh forces non-interactive behavior in --yes mode.
 export ACFS_INTERACTIVE="${ACFS_INTERACTIVE:-}"
 RESET_STATE_ONLY=false
+ACFS_INSTALL_LOCK_FD=""
+ACFS_INSTALL_LOCK_FILE=""
 
 # Preflight options
 SKIP_PREFLIGHT=false
@@ -851,7 +853,7 @@ acfs_log_init() {
 
     if [[ "$tee_logging_ok" != "true" ]]; then
         if [[ -n "${ACFS_LOG_ORIGINAL_STDERR_FD:-}" ]]; then
-            exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&- 2>/dev/null || true
+            { exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&-; } 2>/dev/null || true
             ACFS_LOG_ORIGINAL_STDERR_FD=""
         fi
         # Fallback: redirect stderr to both terminal (via original fd) and log file
@@ -873,7 +875,7 @@ acfs_log_close() {
     # often use fd 3 themselves; inheriting it must not make us redirect/close it.
     if [[ "${ACFS_LOG_STDERR_CAPTURED:-false}" == "true" && -n "${ACFS_LOG_ORIGINAL_STDERR_FD:-}" ]]; then
         exec 2>&"${ACFS_LOG_ORIGINAL_STDERR_FD}" || true
-        exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&- 2>/dev/null || true
+        { exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&-; } 2>/dev/null || true
         ACFS_LOG_ORIGINAL_STDERR_FD=""
         ACFS_LOG_STDERR_CAPTURED=false
     fi
@@ -1169,6 +1171,26 @@ acfs_bootstrap_dir_is_owned_temp() {
     [[ -d "$dir" ]] || return 1
 }
 
+acfs_remember_install_lock() {
+    ACFS_INSTALL_LOCK_FD="$1"
+    ACFS_INSTALL_LOCK_FILE="$2"
+}
+
+acfs_release_install_lock() {
+    case "${ACFS_INSTALL_LOCK_FD:-}" in
+        198)
+            flock -u 198 2>/dev/null || true
+            { exec 198>&-; } 2>/dev/null || true
+            ;;
+        199)
+            flock -u 199 2>/dev/null || true
+            { exec 199>&-; } 2>/dev/null || true
+            ;;
+    esac
+    ACFS_INSTALL_LOCK_FD=""
+    ACFS_INSTALL_LOCK_FILE=""
+}
+
 cleanup() {
     # Capture exit code FIRST, before any other commands can overwrite $?
     local exit_code=$?
@@ -1240,6 +1262,7 @@ cleanup() {
             acfs_notify_install_failure 2>/dev/null || true
         fi
     fi
+    acfs_release_install_lock
     # Finalize log file (restore stderr, strip colors, add footer)
     acfs_log_close 2>/dev/null || true
 }
@@ -4461,10 +4484,10 @@ normalize_user() {
                 fi
                 # Ensure destination file ends with newline before appending
                 if [[ -s "$dst" ]]; then
-                    local last_char
-                    last_char=$(tail -c 1 "$dst" | od -An -t u1 | tr -d ' ' 2>/dev/null || true)
+                    last_char=""
+                    last_char=$(tail -c 1 "$dst" | od -An -t u1 | tr -d " " 2>/dev/null || true)
                     if [[ "$last_char" != "10" ]]; then
-                        echo "" >> "$dst"
+                        printf "\n" >> "$dst"
                     fi
                 fi
                 printf "%s\n" "$line" >> "$dst"
@@ -5495,6 +5518,7 @@ install_agents_phase() {
         codex_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/acfs-codex-wrapper.XXXXXX")" || true
         if [[ -n "$codex_wrapper_tmp" ]]; then
             printf '%s\n' '#!/bin/bash' "exec \"$TARGET_HOME/.bun/bin/bun\" \"$TARGET_HOME/.bun/bin/codex\" \"\$@\"" > "$codex_wrapper_tmp"
+            chmod 0755 "$codex_wrapper_tmp" || true
             try_step "Creating Codex bun wrapper" acfs_install_executable_into_primary_bin "$codex_wrapper_tmp" "codex" || true
             rm -f "$codex_wrapper_tmp" 2>/dev/null || true
         fi
@@ -5511,6 +5535,7 @@ install_agents_phase() {
         gemini_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/acfs-gemini-wrapper.XXXXXX")" || true
         if [[ -n "$gemini_wrapper_tmp" ]]; then
             printf '%s\n' '#!/bin/bash' "exec \"$TARGET_HOME/.bun/bin/bun\" \"$TARGET_HOME/.bun/bin/gemini\" \"\$@\"" > "$gemini_wrapper_tmp"
+            chmod 0755 "$gemini_wrapper_tmp" || true
             try_step "Creating Gemini bun wrapper" acfs_install_executable_into_primary_bin "$gemini_wrapper_tmp" "gemini" || true
             rm -f "$gemini_wrapper_tmp" 2>/dev/null || true
         fi
@@ -5824,6 +5849,7 @@ install_cloud_db_legacy_cloud() {
 # Created by ACFS installer (issue #152).
 exec "$TARGET_HOME/.bun/bin/bun" x wrangler@latest "\$@"
 WRANGLER_SHIM
+                                    chmod 0755 "$wrangler_wrapper_tmp" || true
                                     if acfs_install_executable_into_primary_bin "$wrangler_wrapper_tmp" "wrangler"; then
                                         log_detail "Created bun-based wrangler shim at $shim_dir/wrangler (node not found)"
                                     fi
@@ -6372,7 +6398,7 @@ UNIT_EOF
                                 systemctl --user restart agent-mail.service >/dev/null 2>&1
                             fi
                             active_waited=0
-                            active_max_wait=10
+                            active_max_wait=30
                             until systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1; do
                                 if [[ "$active_waited" -ge "$active_max_wait" ]]; then
                                     break
@@ -6423,7 +6449,7 @@ UNIT_EOF
                         fi
                     '; then
                         local am_waited=0
-                        local am_max_wait=30
+                        local am_max_wait=90
                         local am_health_curl=""
                         am_health_curl="$(acfs_early_system_binary_path curl 2>/dev/null || true)"
                         if [[ -z "$am_health_curl" ]]; then
@@ -6474,6 +6500,14 @@ UNIT_EOF
     else
         log_detail "Installing Ultimate Bug Scanner"
         try_step "Installing UBS" acfs_run_verified_upstream_script_as_target "ubs" "bash" --easy-mode || log_warn "UBS installation may have failed"
+    fi
+
+    # Beads Rust
+    if binary_installed "br"; then
+        log_detail "Beads Rust already installed"
+    else
+        log_detail "Installing Beads Rust"
+        try_step "Installing Beads Rust" acfs_run_verified_upstream_script_as_target "br" "bash" || log_warn "Beads Rust installation may have failed"
     fi
 
     # Beads Viewer
@@ -7631,6 +7665,7 @@ main() {
                 log_error "Wait for it to finish, then retry. Lock file: $_acfs_lock_file"
                 exit 1
             fi
+            acfs_remember_install_lock "$_acfs_lock_fd" "$_acfs_lock_file"
         else
             log_error "Unable to open ACFS install lock file: $_acfs_lock_file"
             exit 1

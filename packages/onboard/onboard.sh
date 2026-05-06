@@ -1466,7 +1466,7 @@ init_progress() {
     exec {lock_fd}>"$PROGRESS_LOCK_FILE"
     if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
         echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
@@ -1478,19 +1478,19 @@ init_progress() {
                 echo -e "${YELLOW}Warning: repaired malformed progress file (backup: $backup).${NC}" >&2
             else
                 echo -e "${RED}Error: could not back up malformed progress file.${NC}" >&2
-                exec {lock_fd}>&- 2>/dev/null || true
+                { exec {lock_fd}>&-; } 2>/dev/null || true
                 return 1
             fi
         fi
 
         now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         if ! write_default_progress_file "$now" "$now"; then
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         fi
     fi
 
-    exec {lock_fd}>&- 2>/dev/null || true
+    { exec {lock_fd}>&-; } 2>/dev/null || true
 }
 
 # Get list of completed lessons
@@ -1582,13 +1582,13 @@ mark_completed() {
         exec {lock_fd}>"$PROGRESS_LOCK_FILE"
         if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
             echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         fi
 
         tmp=$(mktemp "${progress_dir}/.acfs_onboard.XXXXXX" 2>/dev/null) || {
             echo -e "${RED}Error: could not save progress (mktemp failed).${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         }
 
@@ -1603,18 +1603,18 @@ mark_completed() {
             mv -- "$tmp" "$PROGRESS_FILE" 2>/dev/null || {
                 rm -f -- "$tmp" 2>/dev/null || true
                 echo -e "${RED}Error: could not save progress (mv failed).${NC}" >&2
-                exec {lock_fd}>&- 2>/dev/null || true
+                { exec {lock_fd}>&-; } 2>/dev/null || true
                 return 1
             }
         else
             rm -f -- "$tmp" 2>/dev/null || true
             echo -e "${RED}Error: could not save progress.${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         fi
 
         # Release lock
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 0
     fi
 
@@ -1628,18 +1628,18 @@ mark_completed() {
     exec {lock_fd}>"$PROGRESS_LOCK_FILE"
     if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
         echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
     completed_csv="$(build_completed_csv "$lesson")"
     next_current="$(get_next_incomplete_from_csv "$completed_csv")"
     if ! write_progress_without_jq "$completed_csv" "$next_current"; then
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
-    exec {lock_fd}>&- 2>/dev/null || true
+    { exec {lock_fd}>&-; } 2>/dev/null || true
     return 0
 }
 
@@ -1659,13 +1659,13 @@ set_current() {
         exec {lock_fd}>"$PROGRESS_LOCK_FILE"
         if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
             echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         fi
 
         tmp=$(mktemp "${progress_dir}/.acfs_onboard.XXXXXX" 2>/dev/null) || {
             echo -e "${RED}Error: could not update progress (mktemp failed).${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         }
 
@@ -1676,18 +1676,18 @@ set_current() {
             mv -- "$tmp" "$PROGRESS_FILE" 2>/dev/null || {
                 rm -f -- "$tmp" 2>/dev/null || true
                 echo -e "${RED}Error: could not update progress (mv failed).${NC}" >&2
-                exec {lock_fd}>&- 2>/dev/null || true
+                { exec {lock_fd}>&-; } 2>/dev/null || true
                 return 1
             }
         else
             rm -f -- "$tmp" 2>/dev/null || true
             echo -e "${RED}Error: could not update progress.${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         fi
 
         # Release lock
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 0
     fi
 
@@ -1700,17 +1700,17 @@ set_current() {
     exec {lock_fd}>"$PROGRESS_LOCK_FILE"
     if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
         echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
     completed_csv="$(build_completed_csv)"
     if ! write_progress_without_jq "$completed_csv" "$lesson"; then
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
-    exec {lock_fd}>&- 2>/dev/null || true
+    { exec {lock_fd}>&-; } 2>/dev/null || true
     return 0
 }
 
@@ -1726,7 +1726,7 @@ reset_progress() {
     exec {lock_fd}>"$PROGRESS_LOCK_FILE"
     if ! flock -x -w 5 "$lock_fd" 2>/dev/null; then
         echo -e "${RED}Error: could not acquire progress lock.${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
@@ -1744,7 +1744,7 @@ reset_progress() {
     local tmp
     tmp=$(mktemp "${progress_dir}/.acfs_onboard.XXXXXX" 2>/dev/null) || {
         echo -e "${RED}Error: could not reset progress (mktemp failed).${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     }
     if cat > "$tmp" <<EOF
@@ -1759,18 +1759,18 @@ EOF
         mv -- "$tmp" "$PROGRESS_FILE" 2>/dev/null || {
             rm -f -- "$tmp" 2>/dev/null || true
             echo -e "${RED}Error: could not reset progress (mv failed).${NC}" >&2
-            exec {lock_fd}>&- 2>/dev/null || true
+            { exec {lock_fd}>&-; } 2>/dev/null || true
             return 1
         }
     else
         rm -f -- "$tmp" 2>/dev/null || true
         echo -e "${RED}Error: could not reset progress (write failed).${NC}" >&2
-        exec {lock_fd}>&- 2>/dev/null || true
+        { exec {lock_fd}>&-; } 2>/dev/null || true
         return 1
     fi
 
     # Release lock
-    exec {lock_fd}>&- 2>/dev/null || true
+    { exec {lock_fd}>&-; } 2>/dev/null || true
     echo -e "${GREEN}Progress reset!${NC}"
     return 0
 }
@@ -3084,7 +3084,7 @@ EOF
         "")
             init_progress
             main_menu
-            return 0
+            return $?
             ;;
         *)
             echo "Unknown command: $arg"

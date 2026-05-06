@@ -313,6 +313,8 @@ log_debug() { _autofix_log DEBUG "$@"; }
 fsync_file() {
     local file_path="$1"
 
+    [[ -f "$file_path" ]] || return 1
+
     # Method 1: Use Python for true fsync (most reliable)
     # Pass path via sys.argv to avoid shell injection with special characters
     if command -v python3 &>/dev/null; then
@@ -329,14 +331,19 @@ os.close(dir_fd)
 PYEOF
     fi
 
-    # Method 2: Use dd with fsync flag
-    if dd --help 2>&1 | grep -q 'fsync'; then
-        dd if=/dev/null of="$file_path" oflag=append,fsync conv=notrunc bs=1 count=0 2>/dev/null
-        return $?
+    # Method 2: Ask GNU sync to flush this path when supported.
+    if sync "$file_path" 2>/dev/null; then
+        return 0
     fi
 
-    # Method 3: Fallback to sync (less precise, syncs everything)
-    sync
+    # Method 3: Use dd with fsync conversion. This is only a fallback for
+    # minimal environments without Python where path-specific sync is absent.
+    if dd --help 2>&1 | grep -q 'fsync'; then
+        dd if=/dev/null of="$file_path" oflag=append conv=notrunc,fsync bs=1 count=0 2>/dev/null && return 0
+    fi
+
+    # Method 4: Fallback to global sync (less precise, syncs everything)
+    sync 2>/dev/null || true
     return 0
 }
 

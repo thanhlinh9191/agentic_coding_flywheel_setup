@@ -96,6 +96,9 @@ brew install expect
 # Run Docker-based installer test
 ./tests/vm/test_install_ubuntu.sh
 
+# Run focused fresh-root curl|bash regression
+./tests/vm/test_fresh_root_bootstrap_regression.sh
+
 # Run real cross-agent resume matrix (requires authenticated CLI sessions)
 bash ./tests/e2e/test_cross_agent_resume_e2e.sh
 

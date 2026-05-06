@@ -330,6 +330,19 @@ state_resolve_target_home() {
         fi
     fi
 
+    if [[ $EUID -eq 0 ]]; then
+        local id_bin=""
+        id_bin="$(state_system_binary_path id 2>/dev/null || true)"
+        if [[ -n "$id_bin" ]] && ! "$id_bin" "$target_user" >/dev/null 2>&1; then
+            if [[ -n "$explicit_home" ]]; then
+                printf '%s\n' "$explicit_home"
+                return 0
+            fi
+            printf '/home/%s\n' "$target_user"
+            return 0
+        fi
+    fi
+
     current_user="$(state_resolve_current_user 2>/dev/null || true)"
     if [[ -z "$current_user" ]] || [[ "$current_user" != "$target_user" ]]; then
         return 1
@@ -770,10 +783,10 @@ _state_acquire_lock() {
 _state_close_lock_fd() {
     case "${ACFS_LOCK_FD:-}" in
         199)
-            exec 199>&- 2>/dev/null || true
+            { exec 199>&-; } 2>/dev/null || true
             ;;
         200)
-            exec 200>&- 2>/dev/null || true
+            { exec 200>&-; } 2>/dev/null || true
             ;;
     esac
     unset ACFS_LOCK_FD

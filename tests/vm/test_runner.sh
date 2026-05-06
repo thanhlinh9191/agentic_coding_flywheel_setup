@@ -63,7 +63,7 @@ run_check "doctor" "zsh -ic 'acfs doctor'" || failed_checks=$((failed_checks + 1
 run_check "state_file" "test -f ~/.acfs/VERSION" || failed_checks=$((failed_checks + 1))
 run_check "onboard" "zsh -ic 'onboard --help >/dev/null'" || failed_checks=$((failed_checks + 1))
 run_check "onboard_noninteractive_lesson" "zsh -ic 'progress=\$(mktemp); exec </dev/null; ACFS_PROGRESS_FILE=\"\$progress\" onboard 1 >/dev/null'" || failed_checks=$((failed_checks + 1))
-run_check "onboard_noninteractive_menu" "zsh -ic 'out=\$(mktemp); if timeout 5s onboard </dev/null >\"\$out\" 2>&1; then false; else status=\$?; grep -q \"Interactive menu requires a TTY\" \"\$out\" && [ \"\$status\" -eq 1 ]; fi'" || failed_checks=$((failed_checks + 1))
+run_check "onboard_noninteractive_menu" "zsh -ic 'out=\$(mktemp); if timeout 5s onboard </dev/null >\"\$out\" 2>&1; then false; else menu_status=\$?; command grep -q \"Interactive menu requires a TTY\" \"\$out\" && [ \"\$menu_status\" -eq 1 ]; fi'" || failed_checks=$((failed_checks + 1))
 run_check "ntm" "zsh -ic 'ntm --help >/dev/null'" || failed_checks=$((failed_checks + 1))
 run_check "gh" "zsh -ic 'gh --version >/dev/null'" || failed_checks=$((failed_checks + 1))
 run_check "jq" "zsh -ic 'jq --version >/dev/null'" || failed_checks=$((failed_checks + 1))
@@ -76,8 +76,8 @@ run_check "dcg" "zsh -ic 'dcg --version >/dev/null'" || failed_checks=$((failed_
 
 # Check DCG hook
 run_check "dcg_hook" "zsh -ic 'set -o pipefail; dcg doctor --format json 2>/dev/null | jq -e \".hook_registered == true\" >/dev/null || (command -v script >/dev/null 2>&1 && tty_output=\$(script -q -c \"dcg doctor\" /dev/null 2>/dev/null || true) && printf \"%s\" \"\$tty_output\" | grep -qi \"hook wiring.*OK\")'" || failed_checks=$((failed_checks + 1))
-run_check "dcg_block" "zsh -ic 'dcg test \"git reset --hard\" | grep -Eqi \"deny|block\"'" || failed_checks=$((failed_checks + 1))
-run_check "dcg_allow" "zsh -ic 'dcg test \"git status\" | grep -Eqi \"allow\"'" || failed_checks=$((failed_checks + 1))
+run_check "dcg_block" "zsh -ic 'dcg_output=\$(dcg test \"git reset --hard\" 2>&1 || true); printf \"%s\" \"\$dcg_output\" | command grep -Eqi \"deny|block\"'" || failed_checks=$((failed_checks + 1))
+run_check "dcg_allow" "zsh -ic 'dcg_output=\$(dcg test \"git status\" 2>&1 || true); printf \"%s\" \"\$dcg_output\" | command grep -Eqi \"allow\"'" || failed_checks=$((failed_checks + 1))
 
 # Resume checks
 if bash /repo/tests/vm/resume_checks.sh >> "$VERIFY_LOG" 2>&1; then

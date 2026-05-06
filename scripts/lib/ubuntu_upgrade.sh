@@ -1174,11 +1174,11 @@ upgrade_release_lock() {
     case "${ACFS_UPGRADE_LOCK_FD:-}" in
         196)
             flock -u 196 2>/dev/null || true
-            exec 196>&- 2>/dev/null || true
+            { exec 196>&-; } 2>/dev/null || true
             ;;
         197)
             flock -u 197 2>/dev/null || true
-            exec 197>&- 2>/dev/null || true
+            { exec 197>&-; } 2>/dev/null || true
             ;;
     esac
     ACFS_UPGRADE_LOCK_FD=""

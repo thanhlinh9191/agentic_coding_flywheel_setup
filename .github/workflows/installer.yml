@@ -212,6 +212,27 @@ jobs:
           ACFS_CHECKSUMS_REF=main \
           bash install.sh --yes --skip-preflight --skip-ubuntu-upgrade --mode safe --only lang.uv
 
+  fresh-root-bootstrap-regression:
+    name: Fresh Root Bootstrap Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ubuntu:24.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install container prerequisites
+        working-directory: /
+        run: |
+          apt-get update
+          apt-get install -y sudo curl git ca-certificates jq unzip tar xz-utils gnupg
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run fresh-root stdin installer regression
+        run: bash tests/vm/test_fresh_root_bootstrap_regression.sh --inside-container
+
   selection-tests:
     name: Selection & Contract Tests
     runs-on: ubuntu-latest

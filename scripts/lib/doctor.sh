@@ -2791,6 +2791,16 @@ _doctor_run_manifest_check() {
         return 1
     fi
 
+    if [[ "$cmd" == *"acfs_generated_"* ]]; then
+        local helper_prelude=""
+        helper_prelude="$(declare -f acfs_generated_system_binary_path acfs_generated_resolve_current_user acfs_generated_getent_passwd_entry acfs_generated_passwd_home_from_entry 2>/dev/null || true)"
+        if [[ -z "$helper_prelude" ]]; then
+            log_error "Generated helper functions are unavailable for manifest check command"
+            return 1
+        fi
+        cmd="${helper_prelude}"$'\n'"${cmd}"
+    fi
+
     local system_path_prefix="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 
     case "$run_as" in
@@ -2920,7 +2930,7 @@ check_manifest_supplemental() {
         local tool_name
         tool_name="${cmd%% *}"
         case "$tool_name" in
-            test|"["|grep|export|command|bash|sh|cd|systemctl|"[["*)
+            ""|\#*|test|"["|grep|export|command|bash|sh|cd|systemctl|"[["*)
                 tool_name="${id%.[0-9]*}"    # strip trailing .N
                 tool_name="${tool_name##*.}" # keep last segment
                 ;;

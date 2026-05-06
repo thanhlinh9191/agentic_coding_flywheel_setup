@@ -79,7 +79,7 @@ if ! declare -f acfs_log_init >/dev/null 2>&1; then
 
         if [[ "$tee_logging_ok" != "true" ]]; then
             if [[ -n "${ACFS_LOG_ORIGINAL_STDERR_FD:-}" ]]; then
-                exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&- 2>/dev/null || true
+                { exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&-; } 2>/dev/null || true
                 ACFS_LOG_ORIGINAL_STDERR_FD=""
             fi
             # Fallback: rely on explicit logging calls instead of automatic tee
@@ -97,7 +97,7 @@ if ! declare -f acfs_log_close >/dev/null 2>&1; then
         # often use fd 3 themselves; inheriting it must not make us redirect/close it.
         if [[ "${ACFS_LOG_STDERR_CAPTURED:-false}" == "true" && -n "${ACFS_LOG_ORIGINAL_STDERR_FD:-}" ]]; then
             exec 2>&"${ACFS_LOG_ORIGINAL_STDERR_FD}" || true
-            exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&- 2>/dev/null || true
+            { exec {ACFS_LOG_ORIGINAL_STDERR_FD}>&-; } 2>/dev/null || true
             ACFS_LOG_ORIGINAL_STDERR_FD=""
             ACFS_LOG_STDERR_CAPTURED=false
         fi

@@ -2022,6 +2022,60 @@ test_fsync_file() {
     return 0
 }
 
+test_fsync_file_dd_fallback_uses_valid_gnu_dd_syntax() {
+    local test_file="/tmp/test_fsync_dd_fallback_$$"
+    local args_file="/tmp/test_fsync_dd_args_$$"
+    local original_python3=""
+    local original_sync=""
+    local original_dd=""
+    local dd_args=""
+
+    echo "test" > "$test_file"
+
+    original_python3="$(declare -f python3 2>/dev/null || true)"
+    original_sync="$(declare -f sync 2>/dev/null || true)"
+    original_dd="$(declare -f dd 2>/dev/null || true)"
+
+    python3() { return 127; }
+    sync() { return 1; }
+    dd() {
+        if [[ "${1:-}" == "--help" ]]; then
+            printf '%s\n' "GNU dd supports conv=fsync"
+            return 0
+        fi
+        printf '%s\n' "$*" > "$args_file"
+        return 0
+    }
+
+    if ! fsync_file "$test_file"; then
+        [[ -n "$original_python3" ]] && eval "$original_python3" || unset -f python3
+        [[ -n "$original_sync" ]] && eval "$original_sync" || unset -f sync
+        [[ -n "$original_dd" ]] && eval "$original_dd" || unset -f dd
+        echo "  fsync_file failed instead of using dd fallback"
+        rm -f "$test_file" "$args_file"
+        return 1
+    fi
+
+    [[ -n "$original_python3" ]] && eval "$original_python3" || unset -f python3
+    [[ -n "$original_sync" ]] && eval "$original_sync" || unset -f sync
+    [[ -n "$original_dd" ]] && eval "$original_dd" || unset -f dd
+
+    dd_args="$(cat "$args_file" 2>/dev/null || true)"
+    if [[ "$dd_args" == *"oflag=append,fsync"* ]]; then
+        echo "  dd fallback still uses invalid oflag=fsync syntax: $dd_args"
+        rm -f "$test_file" "$args_file"
+        return 1
+    fi
+    if [[ "$dd_args" != *"oflag=append"* || "$dd_args" != *"conv=notrunc,fsync"* ]]; then
+        echo "  dd fallback did not use expected append + conv=fsync syntax: $dd_args"
+        rm -f "$test_file" "$args_file"
+        return 1
+    fi
+
+    rm -f "$test_file" "$args_file"
+    return 0
+}
+
 # Test: fsync_directory function
 test_fsync_directory() {
     local test_dir="/tmp/test_fsync_dir_$$"
@@ -2298,6 +2352,7 @@ main() {
     run_test test_write_atomic_preserves_temp_through_fsync_functions
     run_test test_append_atomic_preserves_temp_through_fsync_functions
     run_test test_fsync_file
+    run_test test_fsync_file_dd_fallback_uses_valid_gnu_dd_syntax
     run_test test_fsync_directory
     run_test test_backup_creation
     run_test test_backup_creation_uses_unique_paths_per_session

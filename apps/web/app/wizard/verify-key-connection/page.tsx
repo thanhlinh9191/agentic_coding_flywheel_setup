@@ -147,8 +147,9 @@ export default function VerifyKeyConnectionPage() {
         <h2 className="text-xl font-semibold">Troubleshooting</h2>
         <div className="space-y-3">
           <AlertCard variant="warning" title="Still asks for a password?">
-            The key might not have been pasted correctly during the installer prompt.
-            Re-run the installer and paste your public key again when asked.
+            If the installer&apos;s final summary showed an SSH-key follow-up command, run that command from your
+            local computer and then try this connection again. Re-running the installer is safe; exact duplicate
+            public key lines are skipped when ACFS copies keys.
           </AlertCard>
           <AlertCard variant="warning" title="Permission denied (publickey)">
             Your key file permissions may be too open. Fix with:
