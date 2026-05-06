@@ -557,8 +557,8 @@ can_sudo_nopasswd() {
 # SSH Key Prompting (Password-First Flow)
 # ============================================================
 
-# Prompt user for SSH public key and install it
-# Called when running as root with no existing key
+# Prompt for an SSH public key when interactive, or keep existing root keys.
+# Called when running as root before syncing root keys to the target user.
 # Returns 0 on success or skip, 1 on invalid key
 prompt_ssh_key() {
     # Skip entirely in CI mode - no TTY available and no need for SSH keys
@@ -568,6 +568,9 @@ prompt_ssh_key() {
     fi
 
     local authorized_keys="/root/.ssh/authorized_keys"
+    if [[ "${ACFS_TEST_MODE:-}" =~ ^(1|true)$ ]] && [[ -n "${ACFS_TEST_ROOT_AUTHORIZED_KEYS:-}" ]]; then
+        authorized_keys="$ACFS_TEST_ROOT_AUTHORIZED_KEYS"
+    fi
     local has_existing_key=false
     local existing_key_info=""
 
@@ -585,6 +588,17 @@ prompt_ssh_key() {
                 echo "  - $key_type ...${comment}"
             done | head -3)
         fi
+    fi
+
+    if [[ "${YES_MODE:-false}" == "true" ]]; then
+        if [[ "$has_existing_key" == "true" ]]; then
+            log_detail "SSH keys already present; keeping existing keys (--yes mode)"
+        else
+            log_warn "No SSH public key found for root; skipping SSH key prompt in --yes mode"
+            log_detail "After install, add your key with: ssh-copy-id ${TARGET_USER:-ubuntu}@<ip>"
+            export ACFS_SSH_KEY_WARNING="true"
+        fi
+        return 0
     fi
 
     # 2. Check if we can prompt the user (handle curl | bash pipe safely).

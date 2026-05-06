@@ -140,7 +140,8 @@ const PROVIDER_GUIDES = [
       "Go to contabo.com/en-us/vps and select Cloud VPS 50 (64GB RAM, ~$56/month) or Cloud VPS 40 (48GB, ~$36/month)",
       'Click "Configure" and select your preferred region (US recommended for best latency)',
       'Under "Image", select Ubuntu 25.10 (or newest available; 24.04 LTS is fine too)',
-      'Set a root password when prompted (save it - you\'ll need it once)',
+      'Leave add-ons at their free/default values unless you specifically want them: no private networking, no object storage, unmanaged server, monitoring none',
+      'In "Login & password for your server", keep Username as root, enter a strong root password, and save it - you\'ll need it once',
       "Complete checkout (servers activate within minutes, occasionally up to 1 hour)",
       'Go to "Your services" > "VPS control" to find your IP address',
     ],
@@ -578,6 +579,7 @@ export default function CreateVPSPage() {
                   <ul className="mt-2 list-disc space-y-1 pl-5">
                     <li>If asked about SSH keys, <strong>skip that section</strong></li>
                     <li>Choose &quot;Password&quot; authentication</li>
+                    <li>If the provider asks for a username, keep it as <strong>root</strong></li>
                     <li>Set a strong root password</li>
                     <li><strong>Save this password!</strong> You&apos;ll need it once to connect</li>
                   </ul>
@@ -585,6 +587,11 @@ export default function CreateVPSPage() {
                     Some providers email you a password instead - that&apos;s fine too!
                   </p>
                 </GuideStep>
+
+                <GuideTip>
+                  <strong>Contabo add-ons:</strong> In the &quot;Additional Features&quot; section, the default/free options are fine:
+                  no private networking, unlimited traffic, one IPv4 address, no object storage, unmanaged server, and monitoring none.
+                </GuideTip>
 
                 <GuideStep number={6} title="Choose your plan size">
                   Look for a plan with:

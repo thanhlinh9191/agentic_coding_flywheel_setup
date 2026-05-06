@@ -82,7 +82,7 @@ export default function GenerateSSHKeyPage() {
       {/* Explanation */}
       <AlertCard variant="info" title="How SSH keys work">
         You&apos;re creating a <strong className="text-foreground">key pair</strong>: a <Jargon term="private-key">private key</Jargon> (stays on
-        your computer) and a <Jargon term="public-key">public key</Jargon> (you&apos;ll paste during installation).
+        your computer) and a <Jargon term="public-key">public key</Jargon> (safe to share when setting up server login).
         Think of it like a lock and key: you share the lock, but only you have the key.
       </AlertCard>
 
@@ -136,9 +136,22 @@ export default function GenerateSSHKeyPage() {
         </div>
       </div>
 
-      {/* Step 1: Generate */}
+      {/* Step 1: Prepare SSH directory */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Step 1: Generate the key</h2>
+        <h2 className="text-xl font-semibold">Step 1: Make sure the SSH folder exists</h2>
+        <p className="text-sm text-muted-foreground">
+          This creates the folder where your key files will be saved. On Windows, PowerShell only creates it if it is missing.
+        </p>
+        <CommandCard
+          command="mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+          windowsCommand="if (!(Test-Path $HOME\\.ssh)) { New-Item -ItemType Directory -Path $HOME\\.ssh | Out-Null }"
+          showCheckbox
+          persistKey="prepare-ssh-folder"
+        />
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Step 2: Generate the key</h2>
         <p className="text-sm text-muted-foreground">
           Run this command in your <Jargon term="terminal">terminal</Jargon>. You&apos;ll be asked 3 questions—here&apos;s how to answer:
         </p>
@@ -157,9 +170,9 @@ export default function GenerateSSHKeyPage() {
         />
       </div>
 
-      {/* Step 2: Copy public key */}
+      {/* Step 3: Copy public key */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Step 2: Copy your public key</h2>
+        <h2 className="text-xl font-semibold">Step 3: Copy your public key</h2>
         <p className="text-sm text-muted-foreground">
           Run this command and copy the entire output. It starts with{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">
@@ -177,8 +190,8 @@ export default function GenerateSSHKeyPage() {
 
       {/* Important note */}
       <AlertCard variant="warning" title="Save your public key for later">
-        You&apos;ll paste this <strong>during installation</strong>, not when creating the VPS.
-        Save it somewhere safe like a notes app—you&apos;ll need it later!
+        Save this somewhere safe like a notes app. If your VPS was created with password-only access,
+        you may need it for the follow-up SSH key command after installation.
       </AlertCard>
 
       {/* Troubleshooting */}

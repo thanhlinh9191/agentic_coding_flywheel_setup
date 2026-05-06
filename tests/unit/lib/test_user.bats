@@ -334,6 +334,31 @@ EOF
     assert_success
 }
 
+@test "prompt_ssh_key: --yes keeps existing root keys without prompting" {
+    local root_keys="$BATS_TEST_TMPDIR/root_authorized_keys"
+    printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey acfs\n' > "$root_keys"
+
+    export ACFS_TEST_MODE=1
+    export ACFS_TEST_ROOT_AUTHORIZED_KEYS="$root_keys"
+    export YES_MODE=true
+
+    run prompt_ssh_key
+    assert_success
+    assert_output --partial "SSH keys already present"
+    assert_output --partial "--yes mode"
+}
+
+@test "prompt_ssh_key: --yes skips missing root keys without prompting" {
+    export ACFS_TEST_MODE=1
+    export ACFS_TEST_ROOT_AUTHORIZED_KEYS="$BATS_TEST_TMPDIR/missing_authorized_keys"
+    export YES_MODE=true
+
+    run prompt_ssh_key
+    assert_success
+    assert_output --partial "No SSH public key found for root"
+    assert_output --partial "skipping SSH key prompt in --yes mode"
+}
+
 @test "migrate_ssh_keys: fails closed when TARGET_HOME is unresolved" {
     mkdir -p "$HOME/.ssh"
     echo "ssh-rsa TESTKEY" > "$HOME/.ssh/authorized_keys"

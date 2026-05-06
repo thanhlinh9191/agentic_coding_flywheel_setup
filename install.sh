@@ -3657,6 +3657,21 @@ acfs_home_for_user() {
 
     return 1
 }
+
+acfs_default_home_for_new_user() {
+    local user="${1:-}"
+
+    [[ -n "$user" ]] || return 1
+    [[ "$user" =~ ^[a-z_][a-z0-9._-]*$ ]] || return 1
+
+    if [[ "$user" == "root" ]]; then
+        printf '/root\n'
+        return 0
+    fi
+
+    printf '/home/%s\n' "$user"
+}
+
 # Set up target-specific paths
 # Must be called after ensure_root
 init_target_paths() {
@@ -3676,6 +3691,12 @@ init_target_paths() {
     resolved_target_home="$(acfs_home_for_user "$TARGET_USER" "$explicit_target_home" 2>/dev/null || true)"
     if [[ -n "$resolved_target_home" ]]; then
         TARGET_HOME="$resolved_target_home"
+    elif [[ $EUID -eq 0 ]] && ! id "$TARGET_USER" &>/dev/null; then
+        if [[ -n "$explicit_target_home" ]]; then
+            TARGET_HOME="$explicit_target_home"
+        else
+            TARGET_HOME="$(acfs_default_home_for_new_user "$TARGET_USER" 2>/dev/null || true)"
+        fi
     elif [[ -n "$explicit_target_home" ]]; then
         current_user="$(acfs_early_resolve_current_user 2>/dev/null || true)"
         if [[ -n "$current_user" && "$TARGET_USER" == "$current_user" ]]; then
@@ -4352,8 +4373,10 @@ normalize_user() {
         local useradd_exit=0
         local useradd_output=""
         
-        # Create user with home directory and bash shell
-        useradd_output="$($SUDO useradd -m -s /bin/bash "$TARGET_USER" 2>&1)" || useradd_exit=$?
+        # Create user with the home directory chosen during bootstrap. Fresh
+        # root installs resolve this before the user exists so logs/state land
+        # in the same home that useradd records in passwd.
+        useradd_output="$($SUDO useradd -m -d "$TARGET_HOME" -s /bin/bash "$TARGET_USER" 2>&1)" || useradd_exit=$?
         
         if [[ $useradd_exit -ne 0 ]]; then
             if id "$TARGET_USER" &>/dev/null; then
@@ -7577,6 +7600,9 @@ main() {
         local _acfs_lock_home="${TARGET_HOME:-}"
         if [[ -z "$_acfs_lock_home" ]]; then
             _acfs_lock_home="$(acfs_home_for_user "${TARGET_USER:-ubuntu}" || true)"
+        fi
+        if [[ -z "$_acfs_lock_home" ]] && [[ $EUID -eq 0 ]] && ! id "${TARGET_USER:-ubuntu}" &>/dev/null; then
+            _acfs_lock_home="$(acfs_default_home_for_new_user "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"
         fi
         if [[ -z "$_acfs_lock_home" ]] || [[ "$_acfs_lock_home" != /* ]]; then
             log_error "Unable to resolve TARGET_HOME for '${TARGET_USER:-ubuntu}'; export TARGET_HOME explicitly"

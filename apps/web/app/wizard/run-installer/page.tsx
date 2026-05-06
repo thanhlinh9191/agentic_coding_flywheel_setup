@@ -220,26 +220,21 @@ export default function RunInstallerPage() {
         and check if it&apos;s still running.
       </AlertCard>
 
-      {/* CRITICAL: SSH Key Prompt Warning */}
-      <AlertCard variant="error" title="WATCH FOR: SSH Key Prompt">
+      {/* SSH key behavior */}
+      <AlertCard variant="info" title="SSH keys are handled automatically">
         <div className="space-y-3">
           <p>
-            <strong>Early in the installation</strong>, you&apos;ll see a prompt asking for your SSH public key:
+            The installer runs with <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">--yes</code>,
+            so it will not stop for an SSH key prompt.
           </p>
-          <OutputPreview title="You'll see something like:" className="my-3">
-            <pre className="text-muted-foreground whitespace-pre">{`════════════════════════════════════════
-  SSH Key Setup
-════════════════════════════════════════`}</pre>
-            <p className="text-[oklch(0.78_0.16_75)] mt-2">Paste your public key: <span className="animate-pulse">_</span></p>
-          </OutputPreview>
           <p>
-            <strong className="text-foreground">This is when you paste the key you saved earlier!</strong>{" "}
-            It&apos;s the one that starts with <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ssh-ed25519 AAAA...</code>
+            If your root account already has SSH keys, ACFS copies them to the{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{effectiveSSHUsername}</code> user it creates.
           </p>
           <p className="text-sm text-muted-foreground">
-            If you miss this prompt or press Enter without pasting, you won&apos;t be able to connect as the{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">ubuntu</code> user with your SSH key later.
-            (You can fix this manually if needed.)
+            If you connected to root with only a password, finish the install and follow the red SSH-key command
+            in the final summary before reconnecting as{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{effectiveSSHUsername}</code>.
           </p>
         </div>
       </AlertCard>

@@ -8616,7 +8616,19 @@ EOF
     run bash -c 'sed -n "/^init_target_paths()/,/^}/p" "$1" | grep -F "elif [[ -n \"\${TARGET_HOME:-}\" ]]; then"' _ "$installer"
     assert_failure
 
+    run bash -c 'sed -n "/^init_target_paths()/,/^}/p" "$1" | grep -F "$2"' _ "$installer" 'elif [[ $EUID -eq 0 ]] && ! id "$TARGET_USER" &>/dev/null; then'
+    assert_success
+
+    run bash -c 'sed -n "/^init_target_paths()/,/^}/p" "$1" | grep -F "$2"' _ "$installer" 'TARGET_HOME="$(acfs_default_home_for_new_user "$TARGET_USER" 2>/dev/null || true)"'
+    assert_success
+
     run grep -F 'local explicit_user_home_for_repair=""' "$installer"
+    assert_success
+
+    run grep -F 'useradd -m -d "$TARGET_HOME" -s /bin/bash "$TARGET_USER"' "$installer"
+    assert_success
+
+    run grep -F '_acfs_lock_home="$(acfs_default_home_for_new_user "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"' "$installer"
     assert_success
 
     run bash -c 'sed -n "/^init_target_paths()/,/^}/p" "$1" | grep -F "ACFS_BIN_DIR=\"\$TARGET_HOME/.local/bin\""' _ "$installer"
@@ -8632,6 +8644,23 @@ EOF
     assert_failure
 
     run bash -c 'sed -n "/^acfs_summary_emit()/,/^}/p" "$1" | grep -F "local resolved_target_home=\"\${TARGET_HOME:-}\""' _ "$installer"
+    assert_failure
+}
+
+@test "install.sh: missing-user default home uses target username" {
+    local installer="$PROJECT_ROOT/install.sh"
+
+    eval "$(sed -n '/^acfs_default_home_for_new_user()/,/^}/p' "$installer")"
+
+    run acfs_default_home_for_new_user "ubuntu"
+    assert_success
+    assert_output "/home/ubuntu"
+
+    run acfs_default_home_for_new_user "acfstest_user"
+    assert_success
+    assert_output "/home/acfstest_user"
+
+    run acfs_default_home_for_new_user "../bad user"
     assert_failure
 }
 
