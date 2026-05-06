@@ -8278,6 +8278,8 @@ notify-lib|$REPO_ROOT/scripts/lib/notify.sh|_acfs_notify_system_binary_path
 notifications-lib|$REPO_ROOT/scripts/lib/notifications.sh|notifications_system_binary_path
 webhook-lib|$REPO_ROOT/scripts/lib/webhook.sh|webhook_system_binary_path
 ubuntu-upgrade-lib|$REPO_ROOT/scripts/lib/ubuntu_upgrade.sh|ubuntu_system_binary_path
+generated-install-all|$REPO_ROOT/scripts/generated/install_all.sh|acfs_generated_system_binary_path
+generated-doctor-checks|$REPO_ROOT/scripts/generated/doctor_checks.sh|acfs_generated_system_binary_path
 EOF
 
     if [[ -z "$failures" ]]; then

@@ -508,9 +508,9 @@ describe('Generated filesystem script hardening', () => {
     expect(filesystemContent).toContain('_ACFS_RESOLVED_TARGET_HOME=""');
     expect(filesystemContent).toContain('if [[ -n "$_ACFS_RESOLVED_TARGET_HOME" ]]; then');
     expect(filesystemContent).toContain('TARGET_HOME="${_ACFS_RESOLVED_TARGET_HOME%/}"');
-    expect(filesystemContent).not.toContain('elif [[ -n "$_ACFS_EXPLICIT_TARGET_HOME" ]]; then');
-    expect(filesystemContent).not.toContain('TARGET_HOME="$_ACFS_EXPLICIT_TARGET_HOME"');
-    expect(filesystemContent).not.toContain('TARGET_HOME="${TARGET_HOME%/}"');
+    expect(filesystemContent).not.toMatch(/^\s*elif \[\[ -n "\$_ACFS_EXPLICIT_TARGET_HOME" \]\]; then$/m);
+    expect(filesystemContent).not.toMatch(/^\s*TARGET_HOME="\$_ACFS_EXPLICIT_TARGET_HOME"$/m);
+    expect(filesystemContent).not.toMatch(/^\s*TARGET_HOME="\$\{TARGET_HOME%\/}"$/m);
     expect(resolvedHomeIndex).toBeGreaterThanOrEqual(0);
   });
 
@@ -532,6 +532,7 @@ describe('Generated filesystem script hardening', () => {
   test('generated helper functions are in scope for child-shell heredocs', () => {
     expect(filesystemContent).toContain('# Generated helper functions used by this child shell.');
     expect(filesystemContent).toContain('acfs_generated_system_binary_path() {');
+    expect(filesystemContent).toContain('*[!A-Za-z0-9._+-]*)');
     expect(filesystemContent).toContain(
       '_acfs_passwd_entry="$(acfs_generated_getent_passwd_entry "${TARGET_USER:-ubuntu}" 2>/dev/null || true)"'
     );
