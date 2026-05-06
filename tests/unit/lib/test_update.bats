@@ -12384,6 +12384,8 @@ EOF
 }
 
 @test "new tools E2E reports beads probe setup failures accurately" {
+    local bv_block=""
+
     run grep -F 'isolated br probe workspace setup failed; see $LOG_FILE' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh"
     assert_success
 
@@ -12392,4 +12394,24 @@ EOF
 
     run grep -F 'mktemp failed while creating isolated bv probe workspace' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh"
     assert_failure
+
+    bv_block="$(awk '/Testing beads_viewer/,/Testing AI agent binaries/ { print }' "$PROJECT_ROOT/tests/e2e/test_new_tools_e2e.sh")"
+    [[ -n "$bv_block" ]]
+    [[ "$bv_block" != *"return 1"* ]]
+}
+
+@test "user.sh: SSH prompt does not append duplicate root public keys" {
+    run grep -F 'if grep -Fxq "$pubkey" "$authorized_keys" 2>/dev/null; then' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'SSH key already present; not adding duplicate' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+}
+
+@test "user.sh: SSH prompt refuses symlinked key paths" {
+    run grep -F 'Refusing to manage SSH keys: $authorized_keys_dir is a symlink' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'Refusing to manage SSH keys: $authorized_keys is a symlink' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
 }

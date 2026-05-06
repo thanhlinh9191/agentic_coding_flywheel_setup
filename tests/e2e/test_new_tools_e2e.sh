@@ -662,20 +662,20 @@ test_integration() {
     if command -v bv >/dev/null 2>&1; then
         if ! command -v br >/dev/null 2>&1; then
             fail "bv_triage" "br binary not found; bv robot probe requires beads_rust"
-            return 1
-        fi
-        local bv_probe_dir
-        local bv_output=""
-        bv_probe_dir=$(create_beads_probe_workspace)
-        if [[ -z "$bv_probe_dir" || ! -d "$bv_probe_dir" ]]; then
-            fail "bv_triage" "isolated bv probe workspace setup failed; see $LOG_FILE"
-        elif run_beads_probe_command "$bv_probe_dir" br create "BV E2E probe issue" --type task --priority 4 >/dev/null 2>>"$LOG_FILE" && \
-            bv_output=$(run_beads_probe_command "$bv_probe_dir" bv --robot-triage 2>>"$LOG_FILE") && \
-            [[ "$bv_output" =~ ^[[:space:]]*\{ ]] && \
-            grep -q '"quick_ref"' <<<"$bv_output"; then
-            pass "bv_triage" "bv --robot-triage returns valid JSON in isolated workspace"
         else
-            fail "bv_triage" "bv --robot-triage failed"
+            local bv_probe_dir
+            local bv_output=""
+            bv_probe_dir=$(create_beads_probe_workspace)
+            if [[ -z "$bv_probe_dir" || ! -d "$bv_probe_dir" ]]; then
+                fail "bv_triage" "isolated bv probe workspace setup failed; see $LOG_FILE"
+            elif run_beads_probe_command "$bv_probe_dir" br create "BV E2E probe issue" --type task --priority 4 >/dev/null 2>>"$LOG_FILE" && \
+                bv_output=$(run_beads_probe_command "$bv_probe_dir" bv --robot-triage 2>>"$LOG_FILE") && \
+                [[ "$bv_output" =~ ^[[:space:]]*\{ ]] && \
+                grep -q '"quick_ref"' <<<"$bv_output"; then
+                pass "bv_triage" "bv --robot-triage returns valid JSON in isolated workspace"
+            else
+                fail "bv_triage" "bv --robot-triage failed"
+            fi
         fi
     else
         fail "bv_binary" "bv binary not found (REQUIRED)"

@@ -690,8 +690,27 @@ prompt_ssh_key() {
     fi
 
     # 7. Install the key
-    mkdir -p /root/.ssh
-    chmod 700 /root/.ssh
+    local authorized_keys_dir="${authorized_keys%/*}"
+    if [[ -z "$authorized_keys_dir" || "$authorized_keys_dir" == "$authorized_keys" ]]; then
+        authorized_keys_dir="/root/.ssh"
+    fi
+    if [[ -L "$authorized_keys_dir" ]]; then
+        log_error "Refusing to manage SSH keys: $authorized_keys_dir is a symlink"
+        return 1
+    fi
+    mkdir -p "$authorized_keys_dir"
+    chmod 700 "$authorized_keys_dir"
+
+    if [[ -L "$authorized_keys" ]]; then
+        log_error "Refusing to manage SSH keys: $authorized_keys is a symlink"
+        return 1
+    fi
+    touch "$authorized_keys"
+    if grep -Fxq "$pubkey" "$authorized_keys" 2>/dev/null; then
+        chmod 600 "$authorized_keys"
+        log_detail "SSH key already present; not adding duplicate"
+        return 0
+    fi
 
     # Ensure authorized_keys ends with a newline before appending.
     if [[ -s "$authorized_keys" ]]; then
