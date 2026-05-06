@@ -8664,6 +8664,19 @@ EOF
     assert_success
 }
 
+@test "legacy finalize installs and enables nightly user timer" {
+    local installer="$PROJECT_ROOT/install.sh"
+
+    run grep -F 'configure_acfs_nightly_timer() {' "$installer"
+    assert_success
+    run grep -F 'cp "$service_src" "$HOME/.config/systemd/user/acfs-nightly-update.service"' "$installer"
+    assert_success
+    run grep -F 'systemctl --user enable --now acfs-nightly-update.timer' "$installer"
+    assert_success
+    run grep -F 'try_step "Configuring ACFS nightly update timer" configure_acfs_nightly_timer' "$installer"
+    assert_success
+}
+
 @test "nightly update only promotes state target homes with update entrypoint" {
     local nightly="$PROJECT_ROOT/scripts/lib/nightly_update.sh"
     local block=""

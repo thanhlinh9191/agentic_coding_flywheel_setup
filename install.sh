@@ -3848,6 +3848,63 @@ acfs_link_global_bin_command() {
     ln -sf "$source_path" "$dest_path"
 }
 
+configure_acfs_nightly_timer() {
+    local output=""
+    local status=0
+
+    output="$(run_as_target bash -c '
+set -euo pipefail
+
+acfs_home="${ACFS_HOME:-$HOME/.acfs}"
+service_src="$acfs_home/scripts/templates/acfs-nightly-update.service"
+timer_src="$acfs_home/scripts/templates/acfs-nightly-update.timer"
+wrapper="$acfs_home/scripts/nightly-update.sh"
+
+if ! command -v systemctl >/dev/null 2>&1; then
+    printf "%s\n" "ACFS_NIGHTLY_SYSTEMD_UNAVAILABLE: systemctl not found"
+    exit 0
+fi
+
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+    printf "%s\n" "ACFS_NIGHTLY_SYSTEMD_UNAVAILABLE: user systemd manager unavailable"
+    exit 0
+fi
+
+for required_path in "$service_src" "$timer_src" "$wrapper"; do
+    if [[ ! -e "$required_path" ]]; then
+        printf "missing required nightly asset: %s\n" "$required_path" >&2
+        exit 1
+    fi
+done
+
+mkdir -p "$HOME/.config/systemd/user"
+cp "$service_src" "$HOME/.config/systemd/user/acfs-nightly-update.service"
+cp "$timer_src" "$HOME/.config/systemd/user/acfs-nightly-update.timer"
+chmod 755 "$wrapper"
+systemctl --user daemon-reload
+systemctl --user enable --now acfs-nightly-update.timer
+systemctl --user is-enabled acfs-nightly-update.timer >/dev/null
+' 2>&1)" || status=$?
+
+    if [[ "$status" -ne 0 ]]; then
+        log_error "Failed to enable ACFS nightly update timer"
+        if [[ -n "$output" ]]; then
+            log_detail "$output"
+        fi
+        return "$status"
+    fi
+
+    if [[ "$output" == *"ACFS_NIGHTLY_SYSTEMD_UNAVAILABLE"* ]]; then
+        log_warn "Skipping ACFS nightly update timer because user systemd is unavailable"
+        if [[ -n "$output" ]]; then
+            log_detail "$output"
+        fi
+        return 0
+    fi
+
+    log_detail "ACFS nightly update timer enabled"
+}
+
 acfs_install_executable_into_primary_bin() {
     local src_path="$1"
     local command_name="$2"
@@ -6959,6 +7016,7 @@ finalize() {
     try_step "Setting lib scripts permissions" $SUDO chmod 755 "$ACFS_HOME/scripts/lib/"*.sh "$ACFS_HOME/scripts/nightly-update.sh" || return 1
     try_step "Setting generated scripts permissions" $SUDO find "$ACFS_HOME/scripts/generated" -maxdepth 1 -type f -name '*.sh' -exec chmod 755 {} + || return 1
     try_step "Setting scripts ownership" acfs_chown_tree "$TARGET_USER:$TARGET_USER" "$ACFS_HOME/scripts" || return 1
+    try_step "Configuring ACFS nightly update timer" configure_acfs_nightly_timer || return 1
 
     # Install newproj command scripts (used by acfs newproj CLI and TUI wizard)
     log_detail "Installing newproj scripts"
