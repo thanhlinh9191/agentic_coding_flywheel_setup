@@ -131,6 +131,7 @@ research_screenshots/
 /packages/manifest/.gitkeep
 /packages/onboard/.gitkeep
 /scripts/providers/.gitkeep
+/scripts/providers/screenshots/.gitkeep
 /scripts/sync/.gitkeep
 /tests/vm/.gitkeep
 
