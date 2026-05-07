@@ -299,6 +299,8 @@ pass() {
     log_event "$1" "ok" "${2-}"
 }
 
+FACTORY_REDACTED_ARTIFACT_DIR=""
+
 run_step() {
     local phase="$1"
     shift
@@ -504,13 +506,47 @@ systemctl --user is-enabled acfs-nightly-update.timer >/dev/null
 '
 }
 
+redact_factory_artifacts() {
+    local support_lib="/home/ubuntu/.acfs/scripts/lib/support.sh"
+    local stage="${ACFS_FACTORY_REMOTE_DIR}/redacted-artifacts-$(date +%s)"
+    local file=""
+
+    [[ -r "$support_lib" ]] || fail "artifacts.redaction" "support redaction library missing: $support_lib"
+
+    mkdir -p \
+        "$stage/factory" \
+        "$stage/var-log-acfs" \
+        "$stage/home-ubuntu-acfs-logs"
+
+    for file in "$REMOTE_LOG" "$REMOTE_JSONL" "$INSTALL_LOG" "$IDEMPOTENCY_LOG"; do
+        [[ -f "$file" ]] || continue
+        cp -f "$file" "$stage/factory/"
+    done
+    if [[ -d /var/log/acfs ]]; then
+        cp -a /var/log/acfs/. "$stage/var-log-acfs/" 2>/dev/null || true
+    fi
+    if [[ -d /home/ubuntu/.acfs/logs ]]; then
+        cp -a /home/ubuntu/.acfs/logs/. "$stage/home-ubuntu-acfs-logs/" 2>/dev/null || true
+    fi
+
+    # shellcheck source=/dev/null
+    source "$support_lib"
+    REDACT=true
+    REDACTION_COUNT=0
+    VERBOSE=false
+    redact_bundle "$stage"
+
+    FACTORY_REDACTED_ARTIFACT_DIR="$stage"
+    pass "artifacts.redaction" "redacted diagnostic artifact copy"
+}
+
 collect_artifacts() {
     local archive="${ACFS_FACTORY_REMOTE_DIR}/factory-e2e-artifacts.tar.gz"
-    tar -czf "$archive" \
-        --exclude="$archive" \
-        "$ACFS_FACTORY_REMOTE_DIR" \
-        /var/log/acfs \
-        /home/ubuntu/.acfs/logs 2>/dev/null || true
+
+    redact_factory_artifacts
+    [[ -n "$FACTORY_REDACTED_ARTIFACT_DIR" ]] || fail "artifacts.archive" "redacted artifact directory was not created"
+    tar -czf "$archive" -C "$FACTORY_REDACTED_ARTIFACT_DIR" . 2>/dev/null || \
+        fail "artifacts.archive" "failed to archive redacted diagnostics"
     pass "artifacts.remote_archive" "$archive"
 }
 
@@ -626,6 +662,24 @@ wait_for_ssh_ready() {
     return 1
 }
 
+redact_local_factory_artifacts() {
+    local support_lib="$REPO_ROOT/scripts/lib/support.sh"
+
+    if [[ ! -r "$support_lib" ]]; then
+        echo "ERROR: support redaction library missing: $support_lib" >&2
+        return 1
+    fi
+
+    (
+        # shellcheck source=../../scripts/lib/support.sh
+        source "$support_lib"
+        REDACT=true
+        REDACTION_COUNT=0
+        VERBOSE=false
+        redact_bundle "$ARTIFACTS_DIR"
+    )
+}
+
 collect_remote_artifacts() {
     echo "[factory-e2e] Collecting remote artifacts from $remote_dir" >&2
     scp "${scp_args[@]}" "$SSH_TARGET:$remote_dir/factory-e2e.log" "$ARTIFACTS_DIR/" 2>/dev/null || true
@@ -633,6 +687,7 @@ collect_remote_artifacts() {
     scp "${scp_args[@]}" "$SSH_TARGET:$remote_dir/install.log" "$ARTIFACTS_DIR/" 2>/dev/null || true
     scp "${scp_args[@]}" "$SSH_TARGET:$remote_dir/idempotency.log" "$ARTIFACTS_DIR/" 2>/dev/null || true
     scp "${scp_args[@]}" "$SSH_TARGET:$remote_dir/factory-e2e-artifacts.tar.gz" "$ARTIFACTS_DIR/" 2>/dev/null || true
+    redact_local_factory_artifacts
 }
 
 remote_status=0

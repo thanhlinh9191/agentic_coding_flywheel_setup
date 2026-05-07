@@ -344,6 +344,10 @@ assert_not_contains "Quoted password value removed" "$result" "correct horse bat
 assert_not_contains "Quoted token value removed" "$result" "quoted token value 12345"
 assert_not_contains "Quoted client secret value removed" "$result" "quoted client secret value"
 
+result=$(redact_and_read "generated_password_log.txt" "WARN: Generated password for 'ubuntu': abcdefghijklmnopqrstuvwxyz123456")
+assert_contains "Generated ACFS password redacted" "$result" "Generated password for 'ubuntu': <REDACTED:password>"
+assert_not_contains "Generated ACFS password value removed" "$result" "abcdefghijklmnopqrstuvwxyz123456"
+
 # ============================================================
 # Tests: Safe values NOT redacted (false positive prevention)
 # ============================================================

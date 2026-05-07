@@ -1142,6 +1142,7 @@ redact_file() {
         -e 's/Bearer [a-zA-Z0-9._\/-]{10,}/Bearer <REDACTED:bearer>/g' \
         -e 's/eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/<REDACTED:jwt>/g' \
         -e 's#([A-Za-z][A-Za-z0-9+.-]*://)([^/@[:space:]]*):([^/@[:space:]]+)@#\1<REDACTED:credentials>@#g' \
+        -e "s/(Generated password for '?[A-Za-z_][A-Za-z0-9._-]*'?[[:space:]]*:[[:space:]]*)[^[:space:]<>]{4,}/\1<REDACTED:password>/g" \
         "$file" 2>/dev/null || return 0
 
     # JSON-style secrets: "key_name": "value"

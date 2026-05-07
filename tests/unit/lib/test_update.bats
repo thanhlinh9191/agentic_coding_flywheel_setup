@@ -5668,6 +5668,25 @@ EOF
     assert_output --partial "private SSH keys are not committed or uploaded as artifacts"
 }
 
+@test "factory harness redacts diagnostic artifacts before local upload" {
+    local harness="$PROJECT_ROOT/tests/vm/test_factory_install_ubuntu.sh"
+
+    run grep -F 'redact_factory_artifacts()' "$harness"
+    assert_success
+    run grep -F 'support_lib="/home/ubuntu/.acfs/scripts/lib/support.sh"' "$harness"
+    assert_success
+    run grep -F 'tar -czf "$archive" -C "$FACTORY_REDACTED_ARTIFACT_DIR" .' "$harness"
+    assert_success
+    run grep -F 'redact_local_factory_artifacts()' "$harness"
+    assert_success
+    run grep -F 'redact_bundle "$ARTIFACTS_DIR"' "$harness"
+    assert_success
+    run grep -F -- '--exclude="$archive"' "$harness"
+    assert_failure
+    run grep -F '/home/ubuntu/.acfs/logs' "$harness"
+    assert_success
+}
+
 @test "remaining direct system binary resolvers reject pathlike names" {
     local label
     local script
