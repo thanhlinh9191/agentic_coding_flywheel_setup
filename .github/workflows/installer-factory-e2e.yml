@@ -222,6 +222,7 @@ jobs:
           INPUT_TIMEOUT: ${{ inputs.install_timeout_seconds || github.event.client_payload.install_timeout_seconds || '14400' }}
           INPUT_POST_REBOOT_TIMEOUT: ${{ inputs.post_reboot_timeout_seconds || github.event.client_payload.post_reboot_timeout_seconds || '14400' }}
         run: |
+          artifacts_dir="$GITHUB_WORKSPACE/tests/artifacts/qemu-factory-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           args=(
             --ref "$INPUT_REF"
             --mode "$INPUT_MODE"
@@ -229,7 +230,7 @@ jobs:
             --expect-final-ubuntu "$INPUT_EXPECT_FINAL_UBUNTU"
             --install-timeout "$INPUT_TIMEOUT"
             --post-reboot-timeout "$INPUT_POST_REBOOT_TIMEOUT"
-            --artifacts-dir "$GITHUB_WORKSPACE/tests/artifacts/qemu-factory-e2e"
+            --artifacts-dir "$artifacts_dir"
           )
           if [[ "$INPUT_ALLOW_INSTALL_REBOOT" == "true" ]]; then
             args+=(--allow-install-reboot)
@@ -250,6 +251,7 @@ jobs:
           INPUT_TIMEOUT: ${{ inputs.install_timeout_seconds || github.event.client_payload.install_timeout_seconds || '14400' }}
           INPUT_POST_REBOOT_TIMEOUT: ${{ inputs.post_reboot_timeout_seconds || github.event.client_payload.post_reboot_timeout_seconds || '14400' }}
         run: |
+          artifacts_dir="$GITHUB_WORKSPACE/tests/artifacts/factory-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           args=(
             --ssh-target "$SSH_TARGET"
             --ssh-key "$RUNNER_TEMP/acfs-factory-e2e/id"
@@ -259,7 +261,7 @@ jobs:
             --expect-final-ubuntu "$INPUT_EXPECT_FINAL_UBUNTU"
             --install-timeout "$INPUT_TIMEOUT"
             --post-reboot-timeout "$INPUT_POST_REBOOT_TIMEOUT"
-            --artifacts-dir "$GITHUB_WORKSPACE/tests/artifacts/factory-e2e"
+            --artifacts-dir "$artifacts_dir"
           )
           if [[ -n "${SSH_PORT:-}" ]]; then
             args+=(--ssh-port "$SSH_PORT")

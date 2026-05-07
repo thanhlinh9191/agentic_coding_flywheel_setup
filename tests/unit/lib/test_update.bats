@@ -5629,6 +5629,12 @@ EOF
     assert_success
     run grep -F 'Skipping real-host factory E2E' "$workflow"
     assert_failure
+    run grep -F 'qemu-factory-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' "$workflow"
+    assert_success
+    run grep -F 'factory-e2e-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' "$workflow"
+    assert_success
+    run grep -F 'tests/artifacts/qemu-factory-e2e"' "$workflow"
+    assert_failure
 }
 
 @test "remaining direct system binary resolvers reject pathlike names" {
