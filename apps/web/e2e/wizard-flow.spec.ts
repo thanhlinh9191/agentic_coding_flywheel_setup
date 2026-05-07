@@ -741,6 +741,32 @@ test.describe("No localStorage (query-only resilience)", () => {
 });
 
 // =============================================================================
+// STEP 7: ACCOUNTS - Individual Tests
+// =============================================================================
+test.describe("Step 7: Accounts Page", () => {
+  test.beforeEach(async ({ page }) => {
+    await setupWizardState(page, { os: "mac", ip: "192.168.1.100" });
+  });
+
+  test("should make non-essential account signup tracking optional", async ({ page }) => {
+    await page.goto("/wizard/accounts");
+    await page.waitForLoadState("domcontentloaded");
+
+    await expect(page.locator("h1").first()).toContainText(/accounts/i);
+    await expect(page.getByText(/recommended and optional services can wait/i)).toBeVisible();
+    await expect(page.getByLabel("Signed up").first()).toBeVisible();
+
+    await page.getByRole("button", { name: /recommended/i }).click();
+    const optionalSignupChecks = page.getByLabel("Optional signup");
+    await expect(optionalSignupChecks.first()).toBeVisible();
+    await expect(optionalSignupChecks.first()).not.toBeChecked();
+
+    await page.getByRole("button", { name: /continue to pre-flight check/i }).click();
+    await expect(page).toHaveURL(urlPathWithOptionalQuery("/wizard/preflight-check"));
+  });
+});
+
+// =============================================================================
 // STEP 9: RUN INSTALLER - Individual Tests
 // =============================================================================
 test.describe("Step 9: Run Installer Page", () => {

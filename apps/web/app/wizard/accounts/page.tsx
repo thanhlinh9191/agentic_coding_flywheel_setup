@@ -83,8 +83,13 @@ interface ServiceCardProps {
   onToggle: () => void;
 }
 
+function getSignupCheckboxLabel(service: Service): string {
+  return service.tier === "essential" ? "Signed up" : "Optional signup";
+}
+
 function ServiceCard({ service, isChecked, onToggle }: ServiceCardProps) {
   const checkboxId = `service-${service.id}`;
+  const checkboxLabel = getSignupCheckboxLabel(service);
 
   return (
     <div
@@ -105,7 +110,7 @@ function ServiceCard({ service, isChecked, onToggle }: ServiceCardProps) {
             htmlFor={checkboxId}
             className="text-xs text-muted-foreground"
           >
-            Authenticated
+            {checkboxLabel}
           </label>
         </div>
         <div className="min-w-0 flex-1 space-y-2">
@@ -311,9 +316,9 @@ export default function AccountsPage() {
           </div>
         </div>
         <p className="text-muted-foreground">
-          Create accounts for the services you&apos;ll use with your{" "}
-          <Jargon term="vps">VPS</Jargon>. Do this now while the installer runs
-          later.
+          Set up essential accounts for your{" "}
+          <Jargon term="vps">VPS</Jargon> now. Recommended and optional services
+          can wait until you need them.
         </p>
       </div>
 
@@ -401,8 +406,8 @@ export default function AccountsPage() {
               </GuideStep>
 
               <GuideStep number={2} title="Check the box after signing up">
-                After you create each account, check the box next to it. This
-                helps you track your progress.
+                After you create an essential account, check the box next to it.
+                Recommended and optional checkboxes are just notes for later.
               </GuideStep>
 
               <GuideStep number={3} title="Focus on the Essential tier first">
