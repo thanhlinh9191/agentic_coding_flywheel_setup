@@ -7079,6 +7079,7 @@ finalize() {
     try_step "Installing info.sh" install_asset "scripts/lib/info.sh" "$ACFS_HOME/scripts/lib/info.sh" || return 1
     try_step "Installing status.sh" install_asset "scripts/lib/status.sh" "$ACFS_HOME/scripts/lib/status.sh" || return 1
     try_step "Installing capacity.sh" install_asset "scripts/lib/capacity.sh" "$ACFS_HOME/scripts/lib/capacity.sh" || return 1
+    try_step "Installing swarm_status.sh" install_asset "scripts/lib/swarm_status.sh" "$ACFS_HOME/scripts/lib/swarm_status.sh" || return 1
     try_step "Installing changelog.sh" install_asset "scripts/lib/changelog.sh" "$ACFS_HOME/scripts/lib/changelog.sh" || return 1
     try_step "Installing export-config.sh" install_asset "scripts/lib/export-config.sh" "$ACFS_HOME/scripts/lib/export-config.sh" || return 1
     try_step "Installing cheatsheet.sh" install_asset "scripts/lib/cheatsheet.sh" "$ACFS_HOME/scripts/lib/cheatsheet.sh" || return 1

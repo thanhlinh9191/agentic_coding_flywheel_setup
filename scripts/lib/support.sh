@@ -252,6 +252,7 @@ OUTPUT_BASE=""
 OUTPUT_BASE_EXPLICIT=false
 REDACTION_COUNT=0
 DOCTOR_TIMEOUT="${SUPPORT_BUNDLE_DOCTOR_TIMEOUT:-120}"
+SWARM_STATUS_TIMEOUT="${SUPPORT_BUNDLE_SWARM_STATUS_TIMEOUT:-10}"
 SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=false
 [[ -n "${ACFS_SYSTEM_STATE_FILE:-}" ]] && [[ "${ACFS_SYSTEM_STATE_FILE%/}" != "/var/lib/acfs/state.json" ]] && SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=true
 SUPPORT_SYSTEM_STATE_FILE="$(support_sanitize_abs_nonroot_path "${ACFS_SYSTEM_STATE_FILE:-/var/lib/acfs/state.json}" 2>/dev/null || true)"
@@ -927,6 +928,42 @@ capture_doctor_json() {
     fi
 }
 
+# Capture local swarm status JSON output.
+# Usage: capture_swarm_status_json <bundle_dir>
+capture_swarm_status_json() {
+    local bundle_dir="$1"
+
+    local swarm_status_script=""
+    if [[ -n "$_SUPPORT_ACFS_HOME" ]] && [[ -f "$_SUPPORT_ACFS_HOME/scripts/lib/swarm_status.sh" ]]; then
+        swarm_status_script="$_SUPPORT_ACFS_HOME/scripts/lib/swarm_status.sh"
+    elif [[ -f "$_SUPPORT_SCRIPT_DIR/swarm_status.sh" ]]; then
+        swarm_status_script="$_SUPPORT_SCRIPT_DIR/swarm_status.sh"
+    fi
+
+    if [[ -z "$swarm_status_script" ]]; then
+        log_warn "swarm_status.sh not found, skipping swarm status"
+        return 1
+    fi
+
+    log_detail "Running acfs swarm status --json ..."
+    local timeout_bin=""
+    timeout_bin="$(support_system_binary_path timeout 2>/dev/null || command -v timeout 2>/dev/null || true)"
+    if [[ -n "$timeout_bin" ]]; then
+        if "$timeout_bin" "$SWARM_STATUS_TIMEOUT" bash "$swarm_status_script" --json > "$bundle_dir/swarm_status.json" 2>/dev/null; then
+            record_bundle_file "swarm_status.json"
+            return 0
+        fi
+    elif bash "$swarm_status_script" --json > "$bundle_dir/swarm_status.json" 2>/dev/null; then
+        record_bundle_file "swarm_status.json"
+        return 0
+    fi
+
+    log_warn "Swarm status check timed out or failed"
+    echo '{"error": "swarm status check failed or timed out"}' > "$bundle_dir/swarm_status.json"
+    record_bundle_file "swarm_status.json"
+    return 1
+}
+
 # Capture tool versions.
 # Usage: capture_versions <bundle_dir>
 capture_versions() {
@@ -1336,6 +1373,7 @@ main() {
     # --- Capture doctor JSON ---
     log_detail "Running health checks..."
     capture_doctor_json "$bundle_dir" || true
+    capture_swarm_status_json "$bundle_dir" || true
 
     # --- Capture versions ---
     log_detail "Collecting tool versions..."

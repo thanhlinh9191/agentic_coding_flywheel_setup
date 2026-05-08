@@ -97,6 +97,12 @@ JSON
 echo '{"status": "mock", "checks": []}'
 DOCTOR
     chmod +x "$MOCK_ACFS/scripts/lib/doctor.sh"
+
+    cat > "$MOCK_ACFS/scripts/lib/swarm_status.sh" <<'SWARM'
+#!/usr/bin/env bash
+echo '{"schema_version": 1, "status": "pass", "probes": {}}'
+SWARM
+    chmod +x "$MOCK_ACFS/scripts/lib/swarm_status.sh"
 }
 
 cleanup_mock_env() {
@@ -184,6 +190,12 @@ test_bundle_contains_expected_files() {
         harness_pass "Bundle contains performance budget JSON"
     else
         harness_fail "Bundle contains performance budget JSON"
+    fi
+
+    if echo "$contents" | grep -q 'swarm_status.json'; then
+        harness_pass "Bundle contains swarm status JSON"
+    else
+        harness_fail "Bundle contains swarm status JSON"
     fi
 
     if echo "$contents" | grep -q 'versions.json'; then

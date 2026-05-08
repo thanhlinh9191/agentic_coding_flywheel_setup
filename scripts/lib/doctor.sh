@@ -994,6 +994,7 @@ print_acfs_help() {
     echo "  info [options]      Quick system overview (terminal/json/html)"
     echo "  status [options]    Quick one-line health summary"
     echo "  capacity [options]  Estimate safe/recommended agent counts"
+    echo "  swarm status        Local swarm/coordination JSON snapshot"
     echo "  cheatsheet          Command reference (aliases, shortcuts)"
     echo "  changelog [options] Show recent project changes"
     echo "  export-config       Export config for backup/migration"
@@ -4249,6 +4250,46 @@ main() {
             fi
 
             echo "Error: capacity.sh not found" >&2
+            return 1
+            ;;
+        swarm)
+            shift
+            local swarm_subcmd="${1:-status}"
+            case "$swarm_subcmd" in
+                status|snapshot)
+                    [[ $# -gt 0 ]] && shift
+                    ;;
+                help|-h|--help)
+                    echo "Usage: acfs swarm status [--json]"
+                    return 0
+                    ;;
+                *)
+                    echo "Error: unknown swarm subcommand: $swarm_subcmd" >&2
+                    echo "Try 'acfs swarm status --help' for usage." >&2
+                    return 2
+                    ;;
+            esac
+
+            local swarm_status_script=""
+            swarm_status_script="$(_acfs_doctor_find_lib_script "swarm_status.sh" 2>/dev/null || true)"
+
+            if [[ -n "$swarm_status_script" ]]; then
+                _acfs_doctor_exec_bash_script "$swarm_status_script" "$@"
+            fi
+
+            echo "Error: swarm_status.sh not found" >&2
+            return 1
+            ;;
+        swarm-status|swarm_status)
+            shift
+            local swarm_status_script=""
+            swarm_status_script="$(_acfs_doctor_find_lib_script "swarm_status.sh" 2>/dev/null || true)"
+
+            if [[ -n "$swarm_status_script" ]]; then
+                _acfs_doctor_exec_bash_script "$swarm_status_script" "$@"
+            fi
+
+            echo "Error: swarm_status.sh not found" >&2
             return 1
             ;;
         dashboard)
