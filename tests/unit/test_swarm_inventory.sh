@@ -139,6 +139,74 @@ duplicate_inventory_fixture() {
 JSON
 }
 
+stale_inventory_fixture() {
+    write_fixture stale_inventory <<'JSON'
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-08T00:00:00Z",
+  "defaults": {"workload": "standard", "stale_after_hours": 24},
+  "hosts": [
+    {
+      "id": "old-controller",
+      "role": "swarm-controller",
+      "status": "active",
+      "last_probe_at": "2000-01-01T00:00:00Z",
+      "resources": {},
+      "capacity": {"recommended_agents": 25, "safe_agents": 44},
+      "rch": {},
+      "ntm": {"can_launch": true},
+      "ru": {}
+    }
+  ]
+}
+JSON
+}
+
+role_boundary_inventory_fixture() {
+    write_fixture role_boundary_inventory <<'JSON'
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-08T00:00:00Z",
+  "defaults": {"workload": "standard", "stale_after_hours": 24},
+  "hosts": [
+    {
+      "id": "support-host",
+      "role": "support",
+      "status": "active",
+      "last_probe_at": "2099-01-01T00:00:00Z",
+      "resources": {},
+      "capacity": {"recommended_agents": 4, "safe_agents": 6},
+      "rch": {},
+      "ntm": {"can_launch": true},
+      "ru": {}
+    },
+    {
+      "id": "rch-worker-b",
+      "role": "rch-worker",
+      "status": "active",
+      "last_probe_at": "2099-01-01T00:00:00Z",
+      "resources": {},
+      "capacity": {"recommended_agents": 99, "safe_agents": 120},
+      "rch": {"worker": true},
+      "ntm": {"can_launch": true},
+      "ru": {}
+    },
+    {
+      "id": "disabled-but-active-status",
+      "role": "disabled",
+      "status": "active",
+      "last_probe_at": "2099-01-01T00:00:00Z",
+      "resources": {},
+      "capacity": {"recommended_agents": 30, "safe_agents": 40},
+      "rch": {},
+      "ntm": {"can_launch": true},
+      "ru": {}
+    }
+  ]
+}
+JSON
+}
+
 run_inventory_json() {
     local name="$1"
     shift
@@ -192,6 +260,49 @@ test_empty_inventory_warns_without_failing_validation() {
     pass "empty_inventory_warns_without_failing_validation"
 }
 
+test_stale_probes_warn_and_block_launch_targets() {
+    local inventory output
+    inventory="$(stale_inventory_fixture)"
+    output="$(run_inventory_json stale report --inventory "$inventory")"
+    [[ "$(cat "$ARTIFACT_DIR/stale.exit")" -eq 1 ]] || return 1
+
+    jq -e '
+      .status == "warn" and
+      .summary.hosts_total == 1 and
+      .summary.stale_probe_count == 1 and
+      .summary.recommended_agents_total == 0 and
+      .summary.safe_agents_total == 0 and
+      (.recommended_launch_targets | length == 0) and
+      (.warnings[] | contains("old-controller") and contains("stale probe"))
+    ' <<< "$output" >/dev/null || return 1
+
+    pass "stale_probes_warn_and_block_launch_targets"
+}
+
+test_role_boundaries_exclude_rch_worker_and_disabled_hosts() {
+    local inventory output
+    inventory="$(role_boundary_inventory_fixture)"
+    output="$(run_inventory_json role-boundaries report --inventory "$inventory")"
+    [[ "$(cat "$ARTIFACT_DIR/role-boundaries.exit")" -eq 0 ]] || return 1
+
+    jq -e '
+      .status == "pass" and
+      .summary.hosts_total == 3 and
+      .summary.active == 3 and
+      .summary.disabled == 1 and
+      .summary.rch_workers == 1 and
+      .summary.recommended_agents_total == 4 and
+      .summary.safe_agents_total == 6 and
+      .role_counts.support == 1 and
+      .role_counts["rch-worker"] == 1 and
+      .role_counts.disabled == 1 and
+      (.recommended_launch_targets | length == 1) and
+      .recommended_launch_targets[0].id == "support-host"
+    ' <<< "$output" >/dev/null || return 1
+
+    pass "role_boundaries_exclude_rch_worker_and_disabled_hosts"
+}
+
 test_import_export_preserve_unknown_fields() {
     local inventory imported exported output
     inventory="$(sample_inventory_fixture)"
@@ -241,6 +352,30 @@ test_duplicate_ids_write_validate_artifacts() {
     pass "duplicate_ids_write_validate_artifacts"
 }
 
+test_malformed_import_export_write_error_artifacts() {
+    local inventory import_artifact_dir export_artifact_dir output
+    inventory="$ARTIFACT_DIR/malformed-import-export.json"
+    import_artifact_dir="$ARTIFACT_DIR/import-artifacts"
+    export_artifact_dir="$ARTIFACT_DIR/export-artifacts"
+    printf '{not valid json\n' > "$inventory"
+
+    output="$(run_inventory_json malformed-import import --input "$inventory" --output "$ARTIFACT_DIR/unused-import.json" --artifact-dir "$import_artifact_dir")"
+    [[ "$(cat "$ARTIFACT_DIR/malformed-import.exit")" -eq 2 ]] || return 1
+    jq -e '.status == "fail" and .error_code == "malformed_json"' <<< "$output" >/dev/null || return 1
+    [[ -f "$import_artifact_dir/swarm_inventory.import.error.json" ]] || return 1
+    [[ -f "$import_artifact_dir/swarm_inventory.import.log" ]] || return 1
+    jq -e '.operation == "import" and .error_code == "malformed_json"' "$import_artifact_dir/swarm_inventory.import.error.json" >/dev/null || return 1
+
+    output="$(run_inventory_json malformed-export export --inventory "$inventory" --output "$ARTIFACT_DIR/unused-export.json" --artifact-dir "$export_artifact_dir")"
+    [[ "$(cat "$ARTIFACT_DIR/malformed-export.exit")" -eq 2 ]] || return 1
+    jq -e '.status == "fail" and .error_code == "malformed_json"' <<< "$output" >/dev/null || return 1
+    [[ -f "$export_artifact_dir/swarm_inventory.export.error.json" ]] || return 1
+    [[ -f "$export_artifact_dir/swarm_inventory.export.log" ]] || return 1
+    jq -e '.operation == "export" and .error_code == "malformed_json"' "$export_artifact_dir/swarm_inventory.export.error.json" >/dev/null || return 1
+
+    pass "malformed_import_export_write_error_artifacts"
+}
+
 test_malformed_report_writes_error_artifacts() {
     local inventory artifact_dir output
     inventory="$ARTIFACT_DIR/malformed.json"
@@ -272,9 +407,12 @@ main() {
 
     run_test test_report_summarizes_launch_targets
     run_test test_empty_inventory_warns_without_failing_validation
+    run_test test_stale_probes_warn_and_block_launch_targets
+    run_test test_role_boundaries_exclude_rch_worker_and_disabled_hosts
     run_test test_import_export_preserve_unknown_fields
     run_test test_validate_rejects_sensitive_fields
     run_test test_duplicate_ids_write_validate_artifacts
+    run_test test_malformed_import_export_write_error_artifacts
     run_test test_malformed_report_writes_error_artifacts
 
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
