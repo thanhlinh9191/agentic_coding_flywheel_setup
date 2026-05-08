@@ -67,7 +67,7 @@ const TROUBLESHOOTING: TroubleshootingItem[] = [
     solutions: [
       "Double-check the password from your provider",
       "Some providers email the password - check your inbox",
-      "Make sure you're using 'root' as the username",
+      "Use root first; if your provider disables root login, connect as ubuntu and run sudo -i before continuing",
     ],
   },
   {
@@ -181,6 +181,7 @@ export default function SSHConnectPage() {
   // Fallback if provider uses ubuntu user
   const sshCommandUbuntu = `ssh ${ubuntuTarget}`;
   const sshCommandUbuntuWindows = `ssh ${ubuntuTarget}`;
+  const becomeRootCommand = "sudo -i";
 
   return (
     <div className="space-y-8">
@@ -293,17 +294,22 @@ export default function SSHConnectPage() {
       {/* Fallback to ubuntu */}
       <div className="space-y-3">
         <h3 className="font-semibold">
-          If &quot;root&quot; doesn&apos;t work, try ubuntu:
+          If &quot;root&quot; is disabled, try ubuntu and become root:
         </h3>
         <p className="text-sm text-muted-foreground">
           Some providers disable root login. If you get &quot;Permission denied&quot; with
-          root, try connecting as ubuntu:
+          root, connect as ubuntu, enter the same VPS password, then open a root shell before continuing.
         </p>
         <CommandCard
           command={sshCommandUbuntu}
           windowsCommand={sshCommandUbuntuWindows}
           description="Connect as ubuntu user (fallback)"
           runLocation="local"
+        />
+        <CommandCard
+          command={becomeRootCommand}
+          description="Switch the ubuntu fallback session into a root shell"
+          runLocation="vps"
         />
       </div>
 
@@ -315,6 +321,9 @@ export default function SSHConnectPage() {
         <p className="mt-2 text-muted-foreground">
           You should see a prompt with your username and &quot;vps&quot; or
           the server hostname. The &quot;#&quot; means you&apos;re logged in as root.
+          If you used the ubuntu fallback, run{" "}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{becomeRootCommand}</code>{" "}
+          first; continue only after your prompt ends with &quot;#&quot;.
         </p>
       </OutputPreview>
 
@@ -419,6 +428,9 @@ export default function SSHConnectPage() {
                   root@vps:~#
                 </code>
                 The &quot;root@vps&quot; part means you&apos;re now controlling the VPS!
+                If you connected as ubuntu instead, run{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{becomeRootCommand}</code>{" "}
+                so your prompt changes to root before you continue.
                 Everything you type from now on runs on the VPS, not your laptop.
               </GuideStep>
             </div>
@@ -458,8 +470,8 @@ export default function SSHConnectPage() {
           <GuideCaution>
             <strong>&quot;Permission denied&quot; error?</strong> Double-check your password.
             Some providers email the password instead of letting you set it—check your inbox.
-            If you&apos;re trying root and it doesn&apos;t work, try the &quot;ubuntu&quot;
-            command shown above.
+            If root login is disabled, use the ubuntu fallback command above and then run{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{becomeRootCommand}</code>.
           </GuideCaution>
 
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

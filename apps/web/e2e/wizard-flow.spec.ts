@@ -365,8 +365,22 @@ test.describe("SSH Connect Page - Critical Bug Prevention", () => {
     await page.goto("/wizard/ssh-connect");
     await expect(page.locator("h1").first()).toBeVisible({ timeout: TIMEOUTS.LOADING_SPINNER });
 
-    // The SSH command should contain the user's IP
+    // The SSH commands should contain the user's IP
+    await expect(page.locator(`text=root@${testIP}`).first()).toBeVisible();
     await expect(page.locator(`text=ubuntu@${testIP}`).first()).toBeVisible();
+  });
+
+  test("should tell ubuntu fallback users to become root before continuing", async ({ page }) => {
+    await setupWizardState(page, { os: "mac", ip: "192.168.1.100" });
+
+    await page.goto("/wizard/ssh-connect");
+    await expect(page.locator("h1").first()).toBeVisible({ timeout: TIMEOUTS.LOADING_SPINNER });
+
+    const bodyText = await page.locator("body").textContent();
+    expect(bodyText).toContain('If "root" is disabled, try ubuntu and become root');
+    expect(bodyText).toContain("Switch the ubuntu fallback session into a root shell");
+    expect(bodyText).toContain("continue only after your prompt ends with");
+    await expect(page.locator('code').filter({ hasText: "sudo -i" }).first()).toBeVisible();
   });
 
   test("should bracket IPv6 hosts in SSH commands", async ({ page }) => {
