@@ -348,6 +348,18 @@ result=$(redact_and_read "generated_password_log.txt" "WARN: Generated password 
 assert_contains "Generated ACFS password redacted" "$result" "Generated password for 'ubuntu': <REDACTED:password>"
 assert_not_contains "Generated ACFS password value removed" "$result" "abcdefghijklmnopqrstuvwxyz123456"
 
+result=$(redact_and_read "mail_thread_snippet.json" '{"thread_snippet":"user pasted ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmn in a private thread","body_md":"Please inspect /home/alice/private/repo and use token ABCDEFGHIJKLMNOPQRSTUVWXYZ"}')
+assert_contains "Agent Mail thread snippet redacted" "$result" '"thread_snippet": "<REDACTED:message_snippet>"'
+assert_contains "Agent Mail body redacted" "$result" '"body_md": "<REDACTED:message_snippet>"'
+assert_not_contains "Agent Mail private thread text removed" "$result" "private thread"
+assert_not_contains "Agent Mail body path removed" "$result" "/home/alice/private"
+
+result=$(redact_and_read "command_diagnostics.json" '{"command":"cd /home/alice/private/repo && OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz1234567890 cargo test","cwd":"/home/alice/private/repo"}')
+assert_contains "Command-line API key redacted" "$result" "<REDACTED:api_key>"
+assert_contains "Command-line home path redacted" "$result" "<REDACTED:path>"
+assert_not_contains "Command-line API key value removed" "$result" "sk-abcdefghijklmnopqrstuvwxyz1234567890"
+assert_not_contains "Command-line private path removed" "$result" "/home/alice/private"
+
 result=$(redact_and_read "openssh_private_key_log.txt" $'before\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAA\n-----END OPENSSH PRIVATE KEY-----\nafter')
 assert_contains "OpenSSH private key block redacted" "$result" "<REDACTED:private_key>"
 assert_not_contains "OpenSSH private key header removed" "$result" "BEGIN OPENSSH PRIVATE KEY"

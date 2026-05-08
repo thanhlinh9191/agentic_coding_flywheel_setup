@@ -198,6 +198,12 @@ test_bundle_contains_expected_files() {
         harness_fail "Bundle contains swarm status JSON"
     fi
 
+    if echo "$contents" | grep -q 'swarm_timeline.json'; then
+        harness_pass "Bundle contains swarm timeline JSON"
+    else
+        harness_fail "Bundle contains swarm timeline JSON"
+    fi
+
     if echo "$contents" | grep -q 'versions.json'; then
         harness_pass "Bundle contains versions.json"
     else
@@ -267,6 +273,12 @@ test_manifest_json_valid() {
     local schema_version
     schema_version=$(jq -r '.schema_version' "$manifest" 2>/dev/null)
     harness_assert_eq "1" "$schema_version" "Manifest schema_version is 1"
+
+    if jq -e '.diagnostics.swarm_timeline.included == true and (.diagnostics.swarm_timeline.probes | length) >= 5' "$manifest" >/dev/null 2>&1; then
+        harness_pass "Manifest includes swarm timeline probe manifest"
+    else
+        harness_fail "Manifest includes swarm timeline probe manifest"
+    fi
 
     rm -rf "$extract_dir"
     cleanup_mock_env

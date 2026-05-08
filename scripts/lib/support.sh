@@ -253,6 +253,7 @@ OUTPUT_BASE_EXPLICIT=false
 REDACTION_COUNT=0
 DOCTOR_TIMEOUT="${SUPPORT_BUNDLE_DOCTOR_TIMEOUT:-120}"
 SWARM_STATUS_TIMEOUT="${SUPPORT_BUNDLE_SWARM_STATUS_TIMEOUT:-10}"
+SWARM_TIMELINE_TIMEOUT="${SUPPORT_BUNDLE_SWARM_TIMELINE_TIMEOUT:-5}"
 PROVENANCE_TIMEOUT="${SUPPORT_BUNDLE_PROVENANCE_TIMEOUT:-10}"
 SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=false
 [[ -n "${ACFS_SYSTEM_STATE_FILE:-}" ]] && [[ "${ACFS_SYSTEM_STATE_FILE%/}" != "/var/lib/acfs/state.json" ]] && SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=true
@@ -1001,6 +1002,310 @@ capture_provenance_json() {
     return 1
 }
 
+support_run_with_timeout() {
+    local timeout_secs="$1"
+    shift
+
+    local timeout_bin=""
+    timeout_bin="$(support_system_binary_path timeout 2>/dev/null || command -v timeout 2>/dev/null || true)"
+    if [[ -n "$timeout_bin" ]]; then
+        "$timeout_bin" "$timeout_secs" "$@" 2>/dev/null
+    else
+        "$@" 2>/dev/null
+    fi
+}
+
+support_binary_path_any() {
+    local candidate=""
+    local path_value=""
+
+    for candidate in "$@"; do
+        path_value="$(support_system_binary_path "$candidate" 2>/dev/null || command -v "$candidate" 2>/dev/null || true)"
+        if [[ -n "$path_value" ]]; then
+            printf '%s\n' "$path_value"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+support_json_count_items() {
+    local json="$1"
+    local jq_bin="$2"
+    local count=""
+
+    count="$(printf '%s' "$json" | "$jq_bin" -r '
+        if type == "array" then length
+        elif has("issues") and (.issues | type == "array") then .issues | length
+        elif has("items") and (.items | type == "array") then .items | length
+        elif has("jobs") and (.jobs | type == "array") then .jobs | length
+        elif has("queue") and (.queue | type == "array") then .queue | length
+        elif has("total") then .total
+        else 0
+        end
+    ' 2>/dev/null || true)"
+    [[ "$count" =~ ^[0-9]+$ ]] || count="0"
+    printf '%s\n' "$count"
+}
+
+support_agent_mail_storage_root() {
+    local candidate=""
+
+    for candidate in \
+        "${SUPPORT_TARGET_HOME:-}/.mcp_agent_mail_git_mailbox_repo" \
+        "${_SUPPORT_CURRENT_HOME:-}/.mcp_agent_mail_git_mailbox_repo" \
+        "${HOME:-}/.mcp_agent_mail_git_mailbox_repo"
+    do
+        [[ -n "$candidate" && -d "$candidate" ]] || continue
+        printf '%s\n' "$candidate"
+        return 0
+    done
+
+    return 1
+}
+
+support_count_agent_mail_messages() {
+    local storage_root="$1"
+
+    [[ -n "$storage_root" && -d "$storage_root/messages" ]] || {
+        printf '0\n'
+        return 0
+    }
+
+    find "$storage_root/messages" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' '
+}
+
+capture_swarm_timeline_json() {
+    local bundle_dir="$1"
+    local timeline_file="$bundle_dir/swarm_timeline.json"
+    local jq_bin=""
+    local generated_at=""
+
+    jq_bin="$(support_system_binary_path jq 2>/dev/null || true)"
+    generated_at="$(date -Iseconds 2>/dev/null || date)"
+
+    if [[ -z "$jq_bin" ]]; then
+        printf '{"schema_version":1,"generated_at":"%s","status":"skipped","privacy":"Raw mail bodies, terminal history, and command output are not collected.","probes":[{"id":"jq","status":"skipped","reason":"jq not found"}]}\n' "$generated_at" > "$timeline_file"
+        record_bundle_file "swarm_timeline.json"
+        return 1
+    fi
+
+    local telemetry_json='{"status":"skipped","reason":"swarm_status.json unavailable"}'
+    local telemetry_probe_status="skipped"
+    local telemetry_probe_reason="swarm_status.json unavailable"
+    if [[ -f "$bundle_dir/swarm_status.json" ]] && "$jq_bin" . "$bundle_dir/swarm_status.json" >/dev/null 2>&1; then
+        telemetry_json="$("$jq_bin" -c '{
+            status: (.status // "unknown"),
+            generated_at: (.generated_at // null),
+            warnings: (.warnings // []),
+            host: (.host // {})
+        }' "$bundle_dir/swarm_status.json" 2>/dev/null || printf '{"status":"warn","reason":"swarm_status.json summary failed"}')"
+        telemetry_probe_status="pass"
+        telemetry_probe_reason="summarized swarm_status.json"
+    fi
+
+    local br_bin=""
+    local beads_json='{"status":"skipped","reason":"br not found in PATH"}'
+    local beads_probe_status="skipped"
+    local beads_probe_reason="br not found in PATH"
+    br_bin="$(support_binary_path_any br 2>/dev/null || true)"
+    if [[ -n "$br_bin" ]]; then
+        local ready_json="" progress_json="" open_json="" cycles_json=""
+        local ready_count=0 progress_count=0 open_count=0 cycle_count=0
+        local beads_warning=""
+        if ready_json="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$br_bin" ready --json)"; then
+            ready_count="$(support_json_count_items "$ready_json" "$jq_bin")"
+        else
+            beads_warning="br ready --json failed or timed out"
+        fi
+        if progress_json="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$br_bin" list --status in_progress --json)"; then
+            progress_count="$(support_json_count_items "$progress_json" "$jq_bin")"
+        else
+            beads_warning="${beads_warning:+$beads_warning; }br list --status in_progress --json failed or timed out"
+        fi
+        if open_json="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$br_bin" list --status open --json)"; then
+            open_count="$(support_json_count_items "$open_json" "$jq_bin")"
+        else
+            beads_warning="${beads_warning:+$beads_warning; }br list --status open --json failed or timed out"
+        fi
+        if cycles_json="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$br_bin" dep cycles --json)"; then
+            cycle_count="$(printf '%s' "$cycles_json" | "$jq_bin" -r '.count // 0' 2>/dev/null || echo 0)"
+            [[ "$cycle_count" =~ ^[0-9]+$ ]] || cycle_count=0
+        else
+            beads_warning="${beads_warning:+$beads_warning; }br dep cycles --json failed or timed out"
+        fi
+        beads_probe_status="pass"
+        beads_probe_reason="beads status snapshot collected"
+        if [[ -n "$beads_warning" ]]; then
+            beads_probe_status="warn"
+            beads_probe_reason="$beads_warning"
+        fi
+        beads_json="$("$jq_bin" -n \
+            --arg status "$beads_probe_status" \
+            --arg reason "$beads_probe_reason" \
+            --argjson ready "$ready_count" \
+            --argjson in_progress "$progress_count" \
+            --argjson open "$open_count" \
+            --argjson dependency_cycles "$cycle_count" \
+            '{status: $status, reason: $reason, ready_count: $ready, in_progress_count: $in_progress, open_count: $open, dependency_cycle_count: $dependency_cycles}')"
+    fi
+
+    local tmux_bin="" ntm_bin=""
+    local ntm_json='{"status":"skipped","reason":"tmux and ntm not found in PATH"}'
+    local ntm_probe_status="skipped"
+    local ntm_probe_reason="tmux and ntm not found in PATH"
+    tmux_bin="$(support_binary_path_any tmux 2>/dev/null || true)"
+    ntm_bin="$(support_binary_path_any ntm 2>/dev/null || true)"
+    if [[ -n "$tmux_bin" || -n "$ntm_bin" ]]; then
+        local ntm_robot_ok=false
+        local session_count=0
+        local window_count=0
+        local tmux_warning=""
+        local ntm_output=""
+        local tmux_output=""
+        if [[ -n "$ntm_bin" ]] && ntm_output="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$ntm_bin" --robot-status)"; then
+            [[ -n "$ntm_output" ]] && ntm_robot_ok=true
+        fi
+        if [[ -n "$tmux_bin" ]]; then
+            if tmux_output="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$tmux_bin" list-sessions -F '#S	#{session_windows}')"; then
+                session_count="$(printf '%s\n' "$tmux_output" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+                window_count="$(printf '%s\n' "$tmux_output" | awk '{sum += $2} END {print sum + 0}')"
+            else
+                tmux_warning="tmux has no listable sessions or timed out"
+            fi
+        fi
+        ntm_probe_status="pass"
+        ntm_probe_reason="NTM/tmux summary collected without session names"
+        if [[ -n "$tmux_warning" && "$ntm_robot_ok" != true ]]; then
+            ntm_probe_status="warn"
+            ntm_probe_reason="$tmux_warning"
+        fi
+        ntm_json="$("$jq_bin" -n \
+            --arg status "$ntm_probe_status" \
+            --arg reason "$ntm_probe_reason" \
+            --argjson ntm_available "$( [[ -n "$ntm_bin" ]] && echo true || echo false )" \
+            --argjson ntm_robot_ok "$ntm_robot_ok" \
+            --argjson tmux_available "$( [[ -n "$tmux_bin" ]] && echo true || echo false )" \
+            --argjson sessions "$session_count" \
+            --argjson windows "$window_count" \
+            '{status: $status, reason: $reason, ntm_available: $ntm_available, ntm_robot_status_ok: $ntm_robot_ok, tmux_available: $tmux_available, tmux_session_count: $sessions, tmux_window_count: $windows}')"
+    fi
+
+    local rch_bin=""
+    local rch_json='{"status":"skipped","reason":"rch not found in PATH"}'
+    local rch_probe_status="skipped"
+    local rch_probe_reason="rch not found in PATH"
+    rch_bin="$(support_binary_path_any rch 2>/dev/null || true)"
+    if [[ -n "$rch_bin" ]]; then
+        local rch_status_output="" rch_queue_output=""
+        local rch_status_ok=false rch_queue_ok=false
+        local rch_queue_count=0
+        if rch_status_output="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$rch_bin" status --json)" \
+            && printf '%s' "$rch_status_output" | "$jq_bin" . >/dev/null 2>&1; then
+            rch_status_ok=true
+        fi
+        if rch_queue_output="$(support_run_with_timeout "$SWARM_TIMELINE_TIMEOUT" "$rch_bin" queue --json)" \
+            && printf '%s' "$rch_queue_output" | "$jq_bin" . >/dev/null 2>&1; then
+            rch_queue_ok=true
+            rch_queue_count="$(support_json_count_items "$rch_queue_output" "$jq_bin")"
+        fi
+        rch_probe_status="pass"
+        rch_probe_reason="RCH status and queue summarized"
+        if [[ "$rch_status_ok" != true || "$rch_queue_ok" != true ]]; then
+            rch_probe_status="warn"
+            rch_probe_reason="RCH status or queue JSON failed or timed out"
+        fi
+        rch_json="$("$jq_bin" -n \
+            --arg status "$rch_probe_status" \
+            --arg reason "$rch_probe_reason" \
+            --argjson status_json_ok "$rch_status_ok" \
+            --argjson queue_json_ok "$rch_queue_ok" \
+            --argjson queue_count "$rch_queue_count" \
+            '{status: $status, reason: $reason, status_json_ok: $status_json_ok, queue_json_ok: $queue_json_ok, queue_count: $queue_count}')"
+    fi
+
+    local am_bin="" agent_mail_json='{"status":"skipped","reason":"Agent Mail CLI and archive not found"}'
+    local agent_mail_probe_status="skipped"
+    local agent_mail_probe_reason="Agent Mail CLI and archive not found"
+    am_bin="$(support_binary_path_any am mcp-agent-mail agent-mail mcp_agent_mail 2>/dev/null || true)"
+    local am_storage_root=""
+    local am_message_count=0
+    am_storage_root="$(support_agent_mail_storage_root 2>/dev/null || true)"
+    if [[ -n "$am_bin" || -n "$am_storage_root" ]]; then
+        am_message_count="$(support_count_agent_mail_messages "$am_storage_root")"
+        agent_mail_probe_status="pass"
+        agent_mail_probe_reason="Agent Mail pointer summary collected; raw bodies excluded"
+        agent_mail_json="$("$jq_bin" -n \
+            --arg status "$agent_mail_probe_status" \
+            --arg reason "$agent_mail_probe_reason" \
+            --argjson cli_available "$( [[ -n "$am_bin" ]] && echo true || echo false )" \
+            --argjson archive_present "$( [[ -n "$am_storage_root" ]] && echo true || echo false )" \
+            --argjson recent_message_file_count "$am_message_count" \
+            '{status: $status, reason: $reason, cli_available: $cli_available, archive_present: $archive_present, recent_thread_pointers: {count: $recent_message_file_count, raw_bodies_collected: false}}')"
+    fi
+
+    local resource_json
+    resource_json="$(printf '%s' "$telemetry_json" | "$jq_bin" -c '{
+        status: (if (.host // {}) == {} then "skipped" else "pass" end),
+        load_1m: (.host.load_1m // null),
+        cpu_count: (.host.cpu_count // null),
+        mem_total_kb: (.host.mem_total_kb // null),
+        mem_available_kb: (.host.mem_available_kb // null),
+        disk_available_kb: (.host.disk_available_kb // null),
+        raw_process_command_lines_collected: false
+    }' 2>/dev/null || printf '{"status":"skipped","raw_process_command_lines_collected":false}')"
+
+    "$jq_bin" -n \
+        --arg generated_at "$generated_at" \
+        --arg privacy "Raw Agent Mail bodies, terminal history, tmux panes, and command output are intentionally excluded." \
+        --argjson telemetry "$telemetry_json" \
+        --arg telemetry_probe_status "$telemetry_probe_status" \
+        --arg telemetry_probe_reason "$telemetry_probe_reason" \
+        --argjson agent_mail "$agent_mail_json" \
+        --arg agent_mail_probe_status "$agent_mail_probe_status" \
+        --arg agent_mail_probe_reason "$agent_mail_probe_reason" \
+        --argjson beads "$beads_json" \
+        --arg beads_probe_status "$beads_probe_status" \
+        --arg beads_probe_reason "$beads_probe_reason" \
+        --argjson ntm "$ntm_json" \
+        --arg ntm_probe_status "$ntm_probe_status" \
+        --arg ntm_probe_reason "$ntm_probe_reason" \
+        --argjson rch "$rch_json" \
+        --arg rch_probe_status "$rch_probe_status" \
+        --arg rch_probe_reason "$rch_probe_reason" \
+        --argjson resource_pressure "$resource_json" \
+        '{
+            schema_version: 1,
+            generated_at: $generated_at,
+            status: ([$telemetry_probe_status, $agent_mail_probe_status, $beads_probe_status, $ntm_probe_status, $rch_probe_status] as $statuses | if (($statuses | index("warn")) or ($statuses | index("skipped"))) then "warn" else "pass" end),
+            privacy: $privacy,
+            probes: [
+                {id: "telemetry", status: $telemetry_probe_status, reason: $telemetry_probe_reason},
+                {id: "agent_mail", status: $agent_mail_probe_status, reason: $agent_mail_probe_reason},
+                {id: "beads", status: $beads_probe_status, reason: $beads_probe_reason},
+                {id: "ntm", status: $ntm_probe_status, reason: $ntm_probe_reason},
+                {id: "rch", status: $rch_probe_status, reason: $rch_probe_reason},
+                {id: "resource_pressure", status: ($resource_pressure.status // "skipped"), reason: "derived from redacted host metrics"}
+            ],
+            timeline: {
+                telemetry: $telemetry,
+                agent_mail: $agent_mail,
+                beads: $beads,
+                ntm: $ntm,
+                rch: $rch,
+                resource_pressure: $resource_pressure
+            }
+        }' > "$timeline_file" 2>/dev/null || {
+        echo '{"schema_version":1,"status":"warn","probes":[{"id":"swarm_timeline","status":"warn","reason":"timeline render failed"}]}' > "$timeline_file"
+        record_bundle_file "swarm_timeline.json"
+        return 1
+    }
+
+    record_bundle_file "swarm_timeline.json"
+    return 0
+}
+
 # Capture tool versions.
 # Usage: capture_versions <bundle_dir>
 capture_versions() {
@@ -1157,6 +1462,10 @@ write_manifest() {
     # Build files array from BUNDLE_FILES
     local files_json
     files_json=$(printf '%s\n' "${BUNDLE_FILES[@]}" | "$jq_bin" -R . | "$jq_bin" -s .) || files_json="[]"
+    local swarm_timeline_manifest="null"
+    if [[ -f "$bundle_dir/swarm_timeline.json" ]]; then
+        swarm_timeline_manifest="$("$jq_bin" '[.probes[]? | {id: .id, status: .status, reason: (.reason // null)}]' "$bundle_dir/swarm_timeline.json" 2>/dev/null || echo null)"
+    fi
 
     "$jq_bin" -n \
         --argjson schema_version 1 \
@@ -1168,6 +1477,7 @@ write_manifest() {
         --argjson file_count "${#BUNDLE_FILES[@]}" \
         --argjson redaction_enabled "$( [[ "$REDACT" == "true" ]] && echo true || echo false )" \
         --argjson redaction_files_modified "$REDACTION_COUNT" \
+        --argjson swarm_timeline_manifest "$swarm_timeline_manifest" \
         '{
             schema_version: $schema_version,
             created_at: $created_at,
@@ -1179,7 +1489,13 @@ write_manifest() {
             redaction: {
                 enabled: $redaction_enabled,
                 files_modified: $redaction_files_modified,
-                patterns: ["api_key", "aws_key", "github_token", "github_pat", "vault_token", "slack_token", "bearer", "jwt", "password", "private_key", "generic_secret"]
+                patterns: ["api_key", "aws_key", "github_token", "github_pat", "vault_token", "slack_token", "bearer", "jwt", "password", "private_key", "generic_secret", "message_snippet", "command_path"]
+            },
+            diagnostics: {
+                swarm_timeline: {
+                    included: ($swarm_timeline_manifest != null),
+                    probes: ($swarm_timeline_manifest // [])
+                }
             }
         }' > "$manifest_file" 2>/dev/null || return 1
 }
@@ -1265,6 +1581,8 @@ redact_file() {
         -e 's/"([A-Za-z][A-Za-z0-9]*[_-]+[A-Za-z0-9_-]*(api[_-]?key|API[_-]?KEY|ApiKey|api[_-]?secret|API[_-]?SECRET|secret[_-]?key|SECRET[_-]?KEY|access[_-]?key|ACCESS[_-]?KEY|access[_-]?token|ACCESS[_-]?TOKEN|refresh[_-]?token|REFRESH[_-]?TOKEN|auth[_-]?token|AUTH[_-]?TOKEN|client[_-]?secret|CLIENT[_-]?SECRET|private[_-]?key|PRIVATE[_-]?KEY|secret|SECRET|token|TOKEN))"[[:space:]]*:[[:space:]]*"([^"<>]{8,})"/"\1": "<REDACTED:generic_secret>"/g' \
         -e 's/"([A-Za-z][A-Za-z0-9]*(Password|Passwd))"[[:space:]]*:[[:space:]]*"([^"<>]{4,})"/"\1": "<REDACTED:password>"/g' \
         -e 's/"([A-Za-z][A-Za-z0-9]*(ApiKey|APIKey|ApiSecret|SecretKey|AccessKey|AccessToken|RefreshToken|AuthToken|ClientSecret|PrivateKey|Secret|Token))"[[:space:]]*:[[:space:]]*"([^"<>]{8,})"/"\1": "<REDACTED:generic_secret>"/g' \
+        -e 's/"(body_md|body_text|thread_snippet|message_snippet|mail_snippet|message_preview)"[[:space:]]*:[[:space:]]*"([^"<>]{1,})"/"\1": "<REDACTED:message_snippet>"/g' \
+        -e 's#"(command|command_line|cmd|cwd|path|project_key|working_directory)"([[:space:]]*:[[:space:]]*")([^"]*)/(home|Users)/[A-Za-z0-9._-]+/[A-Za-z0-9._~+@%/=-]+([^"]*)"#"\1"\2\3/<REDACTED:path>\5"#g' \
         "$file" 2>/dev/null || return 0
 
     # Shell-style quoted secrets can contain spaces. Redact the full quoted
@@ -1412,6 +1730,7 @@ main() {
     capture_doctor_json "$bundle_dir" || true
     capture_swarm_status_json "$bundle_dir" || true
     capture_provenance_json "$bundle_dir" || true
+    capture_swarm_timeline_json "$bundle_dir" || true
 
     # --- Capture versions ---
     log_detail "Collecting tool versions..."
