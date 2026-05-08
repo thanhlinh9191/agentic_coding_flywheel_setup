@@ -72,11 +72,12 @@ const TROUBLESHOOTING = [
 
 export default function PreflightCheckPage() {
   const router = useRouter();
-  const [vpsIP] = useVPSIP();
-  const [acfsRef] = useACFSRef();
+  const [vpsIP, , vpsIPLoaded] = useVPSIP();
+  const [acfsRef, , acfsRefLoaded] = useACFSRef();
   const [ackPassed, setAckPassed] = useState(false);
   const [ackFailed, setAckFailed] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const ready = vpsIPLoaded && acfsRefLoaded;
 
   // Analytics tracking for this wizard step
   const { markComplete } = useWizardAnalytics({
@@ -112,6 +113,18 @@ export default function PreflightCheckPage() {
   const handleSkip = useCallback(() => {
     goNext();
   }, [goNext]);
+
+  if (!ready) {
+    return (
+      <div
+        className="flex items-center justify-center py-12"
+        role="status"
+        aria-label="Loading pre-flight settings"
+      >
+        <ShieldCheck className="h-8 w-8 animate-pulse text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

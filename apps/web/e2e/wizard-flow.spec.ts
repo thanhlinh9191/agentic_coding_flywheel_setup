@@ -19,6 +19,7 @@ const TIMEOUTS = {
 
 const COMPLETED_STEPS_KEY = "agent-flywheel-wizard-completed-steps";
 const COMMAND_COMPLETION_PREFIX = "acfs-command-";
+const ACFS_REF_KEY = "agent-flywheel-acfs-ref";
 const FINAL_STEP_PREREQUISITES = Array.from({ length: 12 }, (_, index) => index + 1);
 
 function urlPathWithOptionalQuery(pathname: string): RegExp {
@@ -35,22 +36,33 @@ async function setupWizardState(
   options: {
     os?: "mac" | "windows";
     ip?: string;
+    acfsRef?: string;
     completedSteps?: number[];
     commandCompletions?: string[];
   } = {}
 ) {
   await page.goto("/");
   await page.evaluate(
-    ({ os, ip, completedSteps, commandCompletions, completedStepsKey, commandCompletionPrefix }) => {
+    ({
+      os,
+      ip,
+      acfsRef,
+      completedSteps,
+      commandCompletions,
+      completedStepsKey,
+      commandCompletionPrefix,
+      acfsRefKey,
+    }) => {
       localStorage.clear();
       if (os) localStorage.setItem("agent-flywheel-user-os", os);
       if (ip) localStorage.setItem("agent-flywheel-vps-ip", ip);
-      
+      if (acfsRef) localStorage.setItem(acfsRefKey, acfsRef);
+
       // If completedSteps is not provided, default to completing all steps up to 13
       // so the layout doesn't automatically redirect us to step 1 during tests.
       const steps = completedSteps || Array.from({ length: 13 }, (_, i) => i + 1);
       localStorage.setItem(completedStepsKey, JSON.stringify(steps));
-      
+
       if (commandCompletions) {
         for (const key of commandCompletions) {
           localStorage.setItem(`${commandCompletionPrefix}${key}`, "true");
@@ -60,10 +72,12 @@ async function setupWizardState(
     {
       os: options.os,
       ip: options.ip,
+      acfsRef: options.acfsRef,
       completedSteps: options.completedSteps,
       commandCompletions: options.commandCompletions,
       completedStepsKey: COMPLETED_STEPS_KEY,
       commandCompletionPrefix: COMMAND_COMPLETION_PREFIX,
+      acfsRefKey: ACFS_REF_KEY,
     }
   );
 }
@@ -820,6 +834,21 @@ test.describe("Step 8: Pre-Flight Check Page", () => {
 
     const commandElement = page.locator("code").filter({ hasText: "scripts/preflight.sh" }).first();
     await expect(commandElement).toContainText("/v2.0.0/scripts/preflight.sh");
+    await expect(commandElement).not.toContainText("/main/scripts/preflight.sh");
+  });
+
+  test("should wait for saved pinned ref before exposing the preflight command", async ({ page }) => {
+    await setupWizardState(page, {
+      os: "mac",
+      ip: "192.168.1.100",
+      acfsRef: "release-2026-05-06",
+    });
+
+    await page.goto("/wizard/preflight-check");
+    await page.waitForLoadState("domcontentloaded");
+
+    const commandElement = page.locator("code").filter({ hasText: "scripts/preflight.sh" }).first();
+    await expect(commandElement).toContainText("/release-2026-05-06/scripts/preflight.sh");
     await expect(commandElement).not.toContainText("/main/scripts/preflight.sh");
   });
 
