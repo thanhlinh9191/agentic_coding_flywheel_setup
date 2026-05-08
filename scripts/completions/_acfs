@@ -90,6 +90,25 @@ _acfs() {
                         '-h[Show help message]' \
                         '--help[Show help message]'
                     ;;
+                offline-pack|artifact-pack)
+                    _arguments \
+                        '1: :((build\\:Build\\ verified\\ offline\\ artifact\\ pack))' \
+                        '--json[Emit machine-readable JSON]' \
+                        '--markdown[Emit human-readable output]' \
+                        '--output[Output directory]:directory:_files -/' \
+                        '--module[Manifest module id to include]:module id:' \
+                        '--dry-run[Print resolved plan without writing files]' \
+                        '--best-effort[Write diagnostic pack after download failures]' \
+                        '--source-root[ACFS source root]:directory:_files -/' \
+                        '--manifest-file[Manifest YAML file]:file:_files' \
+                        '--checksums-file[checksums.yaml file]:file:_files' \
+                        '--arch[Target architecture]:architecture:(x86_64 aarch64)' \
+                        '--ubuntu-version[Target Ubuntu version]:version:' \
+                        '--timeout[Per-download timeout in seconds]:seconds:' \
+                        '--expires-days[Pack expiry window in days]:days:' \
+                        '-h[Show help message]' \
+                        '--help[Show help message]'
+                    ;;
                 swarm)
                     _arguments -C \
                         '1: :_acfs_swarm_commands' \
@@ -443,6 +462,8 @@ _acfs_commands() {
         'swarm_inventory:Local host inventory report/import/export/validate'
         'provisioning-packet:Validate/render provider provisioning packet JSON'
         'provider-packet:Validate/render provider packet JSON'
+        'offline-pack:Build verified offline artifact packs'
+        'artifact-pack:Build verified offline artifact packs'
         'coordinate:Coordination preflight helpers'
         'coord:Coordination helpers (alias for coordinate)'
         'cheatsheet:Command reference (aliases, shortcuts)'

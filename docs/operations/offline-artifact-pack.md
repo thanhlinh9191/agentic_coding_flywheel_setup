@@ -337,6 +337,26 @@ Future pack builder commands must:
   module counts
 - emit JSON output for CI and support
 
+## Builder Command
+
+`acfs offline-pack build` prepares `acfs-offline-pack/` from a connected
+machine:
+
+```bash
+acfs offline-pack build --output /tmp/acfs-pack --module stack.rch
+acfs offline-pack build --dry-run --json
+```
+
+The command resolves modules from `acfs.manifest.yaml`, includes only modules
+with `verified_installer` metadata, reads source URLs and SHA256 values from
+`checksums.yaml`, downloads each approved installer into `artifacts/`, verifies
+the downloaded bytes, copies the local ACFS scripts/configuration needed for
+offline verification, and writes `manifest.json`.
+
+Default behavior is fail-closed: any missing checksum entry, unsupported module,
+download failure, timeout, or hash mismatch aborts the pack. `--best-effort`
+must be set explicitly to write a diagnostic pack with failure metadata.
+
 ## Consumer Requirements
 
 Future installer consumers must:

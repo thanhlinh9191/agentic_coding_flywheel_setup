@@ -360,6 +360,7 @@ const INTERNAL_SCRIPTS_TO_CHECKSUM = [
   'scripts/lib/update.sh',
   'scripts/lib/doctor.sh',
   'scripts/lib/doctor_fix.sh',
+  'scripts/lib/offline_artifact_pack.sh',
   'scripts/lib/autofix.sh',
   'scripts/lib/install_helpers.sh',
   'scripts/lib/logging.sh',
