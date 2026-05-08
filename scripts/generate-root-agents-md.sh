@@ -175,7 +175,7 @@ Agents coordinate via **Agent Mail** (MCP server). Key concepts:
 3. **Use `dcg`** — destructive commands are guarded automatically
 4. **Read AGENTS.md** in each project before making changes
 5. **Mark beads** as you work on them (in_progress -> closed)
-6. **Run tests** before committing (go test, cargo test, etc.)
+6. **Run tests** before committing (go test, rch exec -- cargo test, etc.)
 
 ## Git Conventions
 

@@ -82,8 +82,8 @@ We do not care about backwards compatibility—we're in early development with n
 
 For Rust projects:
 ```bash
-cargo check --all-targets
-cargo clippy --all-targets -- -D warnings
+rch exec -- cargo check --all-targets
+rch exec -- cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
@@ -111,7 +111,7 @@ Always run the project's test suite before committing code changes:
 
 ```bash
 # Rust
-cargo test
+rch exec -- cargo test
 
 # Go
 go test ./...

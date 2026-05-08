@@ -285,15 +285,15 @@ _section_rust() {
 
 - Use **cargo** for all Rust operations.
 - Format code with `cargo fmt` before committing.
-- Run `cargo clippy` to catch common issues.
+- Use `rch exec --` for CPU-heavy Rust builds, tests, checks, and clippy runs.
 
 Commands:
 ```bash
-cargo build          # Debug build
-cargo build --release # Release build
-cargo test           # Run tests
+rch exec -- cargo build           # Debug build
+rch exec -- cargo build --release # Release build
+rch exec -- cargo test            # Run tests
 cargo fmt            # Format code
-cargo clippy         # Lint check
+rch exec -- cargo clippy          # Lint check
 ```
 
 ---

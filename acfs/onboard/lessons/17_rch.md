@@ -12,16 +12,16 @@ Rust compilation is CPU-intensive. When running multiple AI agents that all trig
 
 ## How It Works
 
-RCH intercepts cargo commands via a Claude Code hook and offloads them to remote workers:
+RCH intercepts Claude Code cargo commands via a hook. Codex and other agents should invoke the offload wrapper explicitly:
 
 ```
-Local: cargo build --release
+Agent: rch exec -- cargo build --release
          ↓
 RCH Hook intercepts
          ↓
 Syncs source to worker via rsync
          ↓
-Remote: cargo build --release (on powerful server)
+Worker: cargo build --release (on powerful server)  # rch-policy: allow worker-side command
          ↓
 Artifacts synced back
 ```

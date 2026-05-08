@@ -89,7 +89,7 @@ See `onboard 10` for DCG details.
 ```
 1. Pull latest          git pull --rebase
 2. Reserve files        file_reservation_paths(...)
-3. Edit and test        cargo test / bun test / go test
+3. Edit and test        rch exec -- cargo test / bun test / go test
 4. Commit immediately   git add <files> && git commit
 5. Push                 git push
 6. Release reservation  release_file_reservations(...)
@@ -111,7 +111,7 @@ guarantee semantic correctness. ACFS addresses this with:
 
 - **Frequent small commits** keep the delta small, reducing logical conflict surface
 - **UBS scanning** (`ubs <changed-files>`) catches many semantic issues before commit
-- **Compiler checks** (`cargo check`, `go vet`, `tsc`) run before every commit
+- **Compiler checks** (`rch exec -- cargo check`, `go vet`, `tsc`) run before every commit
 - **Test suites** catch regressions immediately
 - **Agent Mail threads** let agents coordinate on shared interfaces
 
