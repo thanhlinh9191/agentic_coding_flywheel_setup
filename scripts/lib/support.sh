@@ -256,6 +256,7 @@ SWARM_STATUS_TIMEOUT="${SUPPORT_BUNDLE_SWARM_STATUS_TIMEOUT:-10}"
 SWARM_TIMELINE_TIMEOUT="${SUPPORT_BUNDLE_SWARM_TIMELINE_TIMEOUT:-5}"
 PROVENANCE_TIMEOUT="${SUPPORT_BUNDLE_PROVENANCE_TIMEOUT:-10}"
 RESOURCE_PROFILE_TIMEOUT="${SUPPORT_BUNDLE_RESOURCE_PROFILE_TIMEOUT:-5}"
+SWARM_INVENTORY_TIMEOUT="${SUPPORT_BUNDLE_SWARM_INVENTORY_TIMEOUT:-5}"
 SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=false
 [[ -n "${ACFS_SYSTEM_STATE_FILE:-}" ]] && [[ "${ACFS_SYSTEM_STATE_FILE%/}" != "/var/lib/acfs/state.json" ]] && SUPPORT_SYSTEM_STATE_WAS_EXPLICIT=true
 SUPPORT_SYSTEM_STATE_FILE="$(support_sanitize_abs_nonroot_path "${ACFS_SYSTEM_STATE_FILE:-/var/lib/acfs/state.json}" 2>/dev/null || true)"
@@ -1016,6 +1017,247 @@ support_run_with_timeout() {
     fi
 }
 
+support_swarm_inventory_file() {
+    local explicit_inventory=""
+
+    explicit_inventory="$(support_sanitize_abs_nonroot_path "${ACFS_SWARM_INVENTORY_FILE:-}" 2>/dev/null || true)"
+    if [[ -n "$explicit_inventory" ]]; then
+        printf '%s\n' "$explicit_inventory"
+        return 0
+    fi
+
+    if [[ -n "$_SUPPORT_ACFS_HOME" ]]; then
+        printf '%s\n' "$_SUPPORT_ACFS_HOME/swarm/hosts.inventory.json"
+        return 0
+    fi
+
+    if [[ -n "${SUPPORT_TARGET_HOME:-}" ]]; then
+        printf '%s\n' "$SUPPORT_TARGET_HOME/.acfs/swarm/hosts.inventory.json"
+        return 0
+    fi
+
+    return 1
+}
+
+# Capture a sanitized multi-host inventory summary. Raw host records, paths,
+# hostnames, IPs, SSH details, provider identifiers, repo paths, and notes are
+# intentionally excluded from support bundles.
+# Usage: capture_swarm_inventory_json <bundle_dir>
+capture_swarm_inventory_json() {
+    local bundle_dir="$1"
+    local inventory_file="$bundle_dir/swarm_inventory.json"
+    local jq_bin=""
+    local generated_at=""
+    local source_inventory=""
+    local swarm_inventory_script=""
+    local report_output=""
+
+    jq_bin="$(support_system_binary_path jq 2>/dev/null || true)"
+    generated_at="$(date -Iseconds 2>/dev/null || date)"
+
+    if [[ -z "$jq_bin" ]]; then
+        printf '{"schema_version":1,"status":"skipped","capture":{"status":"skipped","reason":"jq not found"},"inventory":{"present":false,"raw_hosts_collected":false},"redaction":{"paths_redacted":true,"raw_hosts_collected":false,"secrets_collected":false}}\n' > "$inventory_file"
+        record_bundle_file "swarm_inventory.json"
+        return 1
+    fi
+
+    source_inventory="$(support_swarm_inventory_file 2>/dev/null || true)"
+    if [[ -z "$source_inventory" || ! -f "$source_inventory" ]]; then
+        "$jq_bin" -n \
+            --arg generated_at "$generated_at" \
+            '{
+                schema_version: 1,
+                generated_at: $generated_at,
+                status: "skipped",
+                capture: {status: "skipped", reason: "swarm inventory file not found"},
+                inventory: {present: false, source: "canonical", path_collected: false, raw_hosts_collected: false},
+                summary: {
+                    hosts_total: 0,
+                    active: 0,
+                    stale: 0,
+                    disabled: 0,
+                    stale_probe_count: 0,
+                    recommended_agents_total: 0,
+                    safe_agents_total: 0,
+                    rch_workers: 0,
+                    unknown_field_count: 0
+                },
+                role_counts: {},
+                status_counts: {},
+                redaction: {
+                    paths_redacted: true,
+                    raw_hosts_collected: false,
+                    raw_hostnames_collected: false,
+                    raw_ip_addresses_collected: false,
+                    ssh_users_collected: false,
+                    ssh_key_paths_collected: false,
+                    provider_ids_collected: false,
+                    repo_paths_collected: false,
+                    home_paths_collected: false,
+                    token_like_notes_collected: false,
+                    secrets_collected: false
+                },
+                diagnostics: {error_code: null, redacted_field_paths: []}
+            }' > "$inventory_file" 2>/dev/null || printf '{"schema_version":1,"status":"skipped"}\n' > "$inventory_file"
+        record_bundle_file "swarm_inventory.json"
+        return 0
+    fi
+
+    if [[ -n "$_SUPPORT_ACFS_HOME" && -f "$_SUPPORT_ACFS_HOME/scripts/lib/swarm_inventory.sh" ]]; then
+        swarm_inventory_script="$_SUPPORT_ACFS_HOME/scripts/lib/swarm_inventory.sh"
+    elif [[ -f "$_SUPPORT_SCRIPT_DIR/swarm_inventory.sh" ]]; then
+        swarm_inventory_script="$_SUPPORT_SCRIPT_DIR/swarm_inventory.sh"
+    fi
+
+    if [[ -z "$swarm_inventory_script" ]]; then
+        "$jq_bin" -n \
+            --arg generated_at "$generated_at" \
+            '{
+                schema_version: 1,
+                generated_at: $generated_at,
+                status: "warn",
+                capture: {status: "warn", reason: "swarm_inventory.sh not found"},
+                inventory: {present: true, source: "canonical", path_collected: false, raw_hosts_collected: false},
+                summary: {
+                    hosts_total: 0,
+                    active: 0,
+                    stale: 0,
+                    disabled: 0,
+                    stale_probe_count: 0,
+                    recommended_agents_total: 0,
+                    safe_agents_total: 0,
+                    rch_workers: 0,
+                    unknown_field_count: 0
+                },
+                role_counts: {},
+                status_counts: {},
+                redaction: {
+                    paths_redacted: true,
+                    raw_hosts_collected: false,
+                    raw_hostnames_collected: false,
+                    raw_ip_addresses_collected: false,
+                    ssh_users_collected: false,
+                    ssh_key_paths_collected: false,
+                    provider_ids_collected: false,
+                    repo_paths_collected: false,
+                    home_paths_collected: false,
+                    token_like_notes_collected: false,
+                    secrets_collected: false
+                },
+                diagnostics: {error_code: "inventory_tool_missing", redacted_field_paths: []}
+            }' > "$inventory_file" 2>/dev/null || printf '{"schema_version":1,"status":"warn"}\n' > "$inventory_file"
+        record_bundle_file "swarm_inventory.json"
+        return 1
+    fi
+
+    report_output="$(support_run_with_timeout "$SWARM_INVENTORY_TIMEOUT" bash "$swarm_inventory_script" --json report --inventory "$source_inventory" 2>/dev/null || true)"
+    if ! printf '%s' "$report_output" | "$jq_bin" . >/dev/null 2>&1; then
+        "$jq_bin" -n \
+            --arg generated_at "$generated_at" \
+            '{
+                schema_version: 1,
+                generated_at: $generated_at,
+                status: "fail",
+                capture: {status: "fail", reason: "swarm inventory report failed or timed out"},
+                inventory: {present: true, source: "canonical", path_collected: false, raw_hosts_collected: false},
+                summary: {
+                    hosts_total: 0,
+                    active: 0,
+                    stale: 0,
+                    disabled: 0,
+                    stale_probe_count: 0,
+                    recommended_agents_total: 0,
+                    safe_agents_total: 0,
+                    rch_workers: 0,
+                    unknown_field_count: 0
+                },
+                role_counts: {},
+                status_counts: {},
+                redaction: {
+                    paths_redacted: true,
+                    raw_hosts_collected: false,
+                    raw_hostnames_collected: false,
+                    raw_ip_addresses_collected: false,
+                    ssh_users_collected: false,
+                    ssh_key_paths_collected: false,
+                    provider_ids_collected: false,
+                    repo_paths_collected: false,
+                    home_paths_collected: false,
+                    token_like_notes_collected: false,
+                    secrets_collected: false
+                },
+                diagnostics: {error_code: "report_failed", redacted_field_paths: []}
+            }' > "$inventory_file" 2>/dev/null || printf '{"schema_version":1,"status":"fail"}\n' > "$inventory_file"
+        record_bundle_file "swarm_inventory.json"
+        return 1
+    fi
+
+    printf '%s' "$report_output" | "$jq_bin" \
+        --arg generated_at "$generated_at" \
+        '
+        def n($v): if ($v | type) == "number" then $v else 0 end;
+        def summary_zero: {
+            hosts_total: 0,
+            active: 0,
+            stale: 0,
+            disabled: 0,
+            stale_probe_count: 0,
+            recommended_agents_total: 0,
+            safe_agents_total: 0,
+            rch_workers: 0,
+            unknown_field_count: 0
+        };
+        (.summary // {}) as $summary
+        | {
+            schema_version: 1,
+            generated_at: $generated_at,
+            status: (.status // (if .error_code then "fail" else "unknown" end)),
+            capture: {
+                status: (if .error_code then "fail" else (.status // "unknown") end),
+                reason: (if .error_code then "inventory validation failed or inventory JSON was malformed" else "swarm inventory summarized" end)
+            },
+            inventory: {present: true, source: "canonical", path_collected: false, raw_hosts_collected: false},
+            summary: (summary_zero + {
+                hosts_total: n($summary.hosts_total),
+                active: n($summary.active),
+                stale: n($summary.stale),
+                disabled: n($summary.disabled),
+                stale_probe_count: n($summary.stale_probe_count),
+                recommended_agents_total: n($summary.recommended_agents_total),
+                safe_agents_total: n($summary.safe_agents_total),
+                rch_workers: n($summary.rch_workers),
+                unknown_field_count: n($summary.unknown_field_count)
+            }),
+            role_counts: (.role_counts // {}),
+            status_counts: (.status_counts // {}),
+            redaction: {
+                paths_redacted: true,
+                raw_hosts_collected: false,
+                raw_hostnames_collected: false,
+                raw_ip_addresses_collected: false,
+                ssh_users_collected: false,
+                ssh_key_paths_collected: false,
+                provider_ids_collected: false,
+                repo_paths_collected: false,
+                home_paths_collected: false,
+                token_like_notes_collected: false,
+                secrets_collected: false
+            },
+            diagnostics: {
+                error_code: (.error_code // null),
+                redacted_field_paths: (.redacted_field_paths // []),
+                warnings: (.warnings // [])
+            }
+        }' > "$inventory_file" 2>/dev/null || {
+        printf '{"schema_version":1,"status":"warn","capture":{"status":"warn","reason":"swarm inventory sanitization failed"},"inventory":{"present":true,"raw_hosts_collected":false},"redaction":{"paths_redacted":true,"raw_hosts_collected":false,"secrets_collected":false}}\n' > "$inventory_file"
+        record_bundle_file "swarm_inventory.json"
+        return 1
+    }
+
+    record_bundle_file "swarm_inventory.json"
+    [[ "$("$jq_bin" -r '.status // "fail"' "$inventory_file" 2>/dev/null || printf 'fail')" != "fail" ]]
+}
+
 # Capture a sanitized ACFS resource-profile snapshot. Raw paths are intentionally
 # omitted; support bundles only need status, safety metadata, and wrapper shape.
 # Usage: capture_resource_profile_json <bundle_dir>
@@ -1566,6 +1808,15 @@ write_manifest() {
             managed_file_count: (.managed_file_count // null)
         }' "$bundle_dir/resource_profile.json" 2>/dev/null || echo null)"
     fi
+    local swarm_inventory_manifest="null"
+    if [[ -f "$bundle_dir/swarm_inventory.json" ]]; then
+        swarm_inventory_manifest="$("$jq_bin" '{
+            included: (.inventory.present == true),
+            status: (.status // "unknown"),
+            paths_redacted: (if .redaction.paths_redacted == true then true else false end),
+            raw_hosts_collected: (if .redaction.raw_hosts_collected == true then true else false end)
+        }' "$bundle_dir/swarm_inventory.json" 2>/dev/null || echo null)"
+    fi
 
     "$jq_bin" -n \
         --argjson schema_version 1 \
@@ -1579,6 +1830,7 @@ write_manifest() {
         --argjson redaction_files_modified "$REDACTION_COUNT" \
         --argjson swarm_timeline_manifest "$swarm_timeline_manifest" \
         --argjson resource_profile_manifest "$resource_profile_manifest" \
+        --argjson swarm_inventory_manifest "$swarm_inventory_manifest" \
         '{
             schema_version: $schema_version,
             created_at: $created_at,
@@ -1600,7 +1852,13 @@ write_manifest() {
                 resource_profile: {
                     included: ($resource_profile_manifest != null),
                     summary: ($resource_profile_manifest // {})
-                }
+                },
+                swarm_inventory: ($swarm_inventory_manifest // {
+                    included: false,
+                    status: "skipped",
+                    paths_redacted: true,
+                    raw_hosts_collected: false
+                })
             }
         }' > "$manifest_file" 2>/dev/null || return 1
 }
@@ -1721,6 +1979,8 @@ write_support_report_index() {
     support_report_write_link_line "$bundle_dir" "provenance.json" "Tool provenance" "$status" "$report_file"
     status="$(support_report_json_status "$bundle_dir" "resource_profile.json" "$jq_bin")"
     support_report_write_link_line "$bundle_dir" "resource_profile.json" "Resource profile" "$status" "$report_file"
+    status="$(support_report_json_status "$bundle_dir" "swarm_inventory.json" "$jq_bin")"
+    support_report_write_link_line "$bundle_dir" "swarm_inventory.json" "Swarm inventory" "$status" "$report_file"
     status="$(support_report_json_status "$bundle_dir" "versions.json" "$jq_bin")"
     support_report_write_link_line "$bundle_dir" "versions.json" "Versions" "$status" "$report_file"
     status="$(support_report_json_status "$bundle_dir" "environment.json" "$jq_bin")"
@@ -2002,6 +2262,7 @@ main() {
     capture_swarm_status_json "$bundle_dir" || true
     capture_provenance_json "$bundle_dir" || true
     capture_resource_profile_json "$bundle_dir" || true
+    capture_swarm_inventory_json "$bundle_dir" || true
     capture_swarm_timeline_json "$bundle_dir" || true
 
     # --- Capture versions ---

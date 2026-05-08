@@ -204,6 +204,12 @@ test_bundle_contains_expected_files() {
         harness_fail "Bundle contains swarm timeline JSON"
     fi
 
+    if echo "$contents" | grep -q 'swarm_inventory.json'; then
+        harness_pass "Bundle contains swarm inventory JSON"
+    else
+        harness_fail "Bundle contains swarm inventory JSON"
+    fi
+
     if echo "$contents" | grep -q 'versions.json'; then
         harness_pass "Bundle contains versions.json"
     else
@@ -278,6 +284,12 @@ test_manifest_json_valid() {
         harness_pass "Manifest includes swarm timeline probe manifest"
     else
         harness_fail "Manifest includes swarm timeline probe manifest"
+    fi
+
+    if jq -e '.diagnostics.swarm_inventory.included == false and .diagnostics.swarm_inventory.status == "skipped" and .diagnostics.swarm_inventory.paths_redacted == true and .diagnostics.swarm_inventory.raw_hosts_collected == false' "$manifest" >/dev/null 2>&1; then
+        harness_pass "Manifest includes skipped swarm inventory diagnostics"
+    else
+        harness_fail "Manifest includes skipped swarm inventory diagnostics"
     fi
 
     rm -rf "$extract_dir"
