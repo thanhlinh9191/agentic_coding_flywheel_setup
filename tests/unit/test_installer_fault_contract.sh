@@ -13,10 +13,14 @@
 # - permission_denied: state/log/support evidence cannot be written.
 # - malformed_state: checkpoint file is not parseable JSON and must fail closed.
 # - interrupted_resume: checkpoint is stale but not failed, so continue/status wins.
+# - ubuntu_upgrade_interrupted: upgrade checkpoint is awaiting reboot/resume.
 # ============================================================
 
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RESCUE_SH="$REPO_ROOT/scripts/lib/rescue.sh"
+SUPPORT_SH="$REPO_ROOT/scripts/lib/support.sh"
 TESTS_PASSED=0
 TESTS_FAILED=0
 ARTIFACT_DIR="${ACFS_FAULT_CONTRACT_ARTIFACTS_DIR:-${TMPDIR:-/tmp}/acfs-fault-contract-artifacts-$(date +%Y%m%d-%H%M%S)-$$}"
@@ -59,7 +63,14 @@ JSON
 {
   "schema_version": 1,
   "created_by": "installer fault contract test",
-  "files": ["state.json", "logs/install.log", "support/local_progress.json"]
+  "files": [
+    "state.json",
+    "logs/install.log",
+    "rescue.json",
+    "rescue.human.txt",
+    "support/local_progress.json",
+    "support/checkpoint_summary.json"
+  ]
 }
 JSON
 }
@@ -105,6 +116,39 @@ write_interrupted_state() {
 JSON
 }
 
+write_ubuntu_upgrade_state() {
+    local path="$1"
+
+    write_file "$path" <<'JSON'
+{
+  "schema_version": 3,
+  "version": "test",
+  "mode": "vibe",
+  "completed_phases": ["user_setup", "filesystem"],
+  "current_phase": "ubuntu_upgrade",
+  "current_step": "Awaiting reboot after Ubuntu upgrade hop",
+  "failed_phase": null,
+  "failed_step": null,
+  "last_updated": 1000,
+  "ubuntu_upgrade": {
+    "enabled": true,
+    "started_at": "2026-05-08T00:00:00Z",
+    "original_version": "22.04",
+    "target_version": "25.10",
+    "upgrade_path": ["24.04", "25.04", "25.10"],
+    "current_stage": "awaiting_reboot",
+    "completed_upgrades": [
+      {"from": "22.04", "to": "24.04", "completed_at": "2026-05-08T00:30:00Z"}
+    ],
+    "current_upgrade": null,
+    "needs_reboot": true,
+    "resume_after_reboot": true,
+    "last_error": null
+  }
+}
+JSON
+}
+
 write_expected() {
     local fixture_dir="$1"
     local id="$2"
@@ -128,7 +172,10 @@ write_expected() {
   "support_evidence": [
     "state.json",
     "logs/install.log",
+    "rescue.json",
+    "rescue.human.txt",
     "support/local_progress.json",
+    "support/checkpoint_summary.json",
     "support/manifest.json"
   ],
   "recovery": {
@@ -246,6 +293,23 @@ LOG
         '["checkpoint still marks current phase", "checkpoint age seconds", "support evidence"]'
 }
 
+fixture_ubuntu_upgrade_interrupted() {
+    local dir
+    dir="$(new_fixture ubuntu-upgrade-interrupted)"
+    write_ubuntu_upgrade_state "$dir/state.json"
+    write_file "$dir/logs/install.log" <<'LOG'
+[ubuntu_upgrade] Awaiting reboot after Ubuntu upgrade hop
+upgrade path: 22.04 -> 24.04 -> 25.04 -> 25.10
+completed hop: 22.04 -> 24.04
+resume service: acfs-upgrade-resume
+support evidence: state.json logs/install.log local_progress.json checkpoint_summary.json
+LOG
+    write_expected "$dir" "ubuntu-upgrade-interrupted" "ubuntu_upgrade_interrupted" "ubuntu_upgrade" "ubuntu_upgrade" 1 \
+        "acfs continue --status" \
+        "Use the upgrade resume/status path and preserve upgrade logs before retrying any installer command." \
+        '["upgrade path: 22.04 -> 24.04 -> 25.04 -> 25.10", "resume service: acfs-upgrade-resume", "support evidence"]'
+}
+
 assert_safe_recovery_command() {
     local command="$1"
     local package_manager_pattern='(^|[^[:alnum:]_])(npm|yarn|pnpm)([^[:alnum:]_]|$)'
@@ -284,10 +348,169 @@ assert_state_status() {
         interrupted)
             jq -e '.current_phase != null and .current_step != null and (.failed_phase == null) and (.failed_step == null)' "$state_file" >/dev/null
             ;;
+        ubuntu_upgrade)
+            jq -e '
+              .current_phase == "ubuntu_upgrade" and
+              .ubuntu_upgrade.enabled == true and
+              .ubuntu_upgrade.current_stage == "awaiting_reboot" and
+              .ubuntu_upgrade.needs_reboot == true and
+              .ubuntu_upgrade.resume_after_reboot == true and
+              (.ubuntu_upgrade.upgrade_path | join(" ") == "24.04 25.04 25.10")
+            ' "$state_file" >/dev/null
+            ;;
         *)
             return 1
             ;;
     esac
+}
+
+expected_rescue_status_for_state() {
+    local state_status="$1"
+
+    case "$state_status" in
+        failed|malformed)
+            printf 'fail|blocked|2\n'
+            ;;
+        interrupted|ubuntu_upgrade)
+            printf 'warn|stale_checkpoint|1\n'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+expected_checkpoint_summary_for_state() {
+    local state_status="$1"
+
+    case "$state_status" in
+        failed)
+            printf 'fail|blocked\n'
+            ;;
+        malformed)
+            printf 'warn|malformed_state\n'
+            ;;
+        interrupted|ubuntu_upgrade)
+            printf 'warn|stale_checkpoint\n'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+run_rescue_lab_outputs() {
+    local fixture_dir="$1"
+    local state_status="$2"
+    local rescue_json="$fixture_dir/rescue.json"
+    local rescue_human="$fixture_dir/rescue.human.txt"
+    local status=0
+    local -a rescue_args=(--state-file "$fixture_dir/state.json" --support-dir "$fixture_dir/support")
+
+    case "$state_status" in
+        interrupted|ubuntu_upgrade)
+            rescue_args+=(--now-epoch 5000 --stale-seconds 60)
+            ;;
+    esac
+
+    set +e
+    bash "$RESCUE_SH" --json "${rescue_args[@]}" > "$rescue_json" 2>&1
+    status=$?
+    set -e
+    printf '%s\n' "$status" > "$fixture_dir/rescue.exit"
+
+    set +e
+    bash "$RESCUE_SH" "${rescue_args[@]}" > "$rescue_human" 2>&1
+    status=$?
+    set -e
+    printf '%s\n' "$status" > "$fixture_dir/rescue.human.exit"
+}
+
+capture_checkpoint_summary_for_fixture() {
+    local fixture_dir="$1"
+
+    env SUPPORT_SH="$SUPPORT_SH" FIXTURE_DIR="$fixture_dir" bash -c '
+        set -euo pipefail
+        log_step() { :; }
+        log_section() { :; }
+        log_detail() { :; }
+        log_success() { :; }
+        log_warn() { :; }
+        log_error() { :; }
+        source "$SUPPORT_SH"
+        _SUPPORT_ACFS_HOME="$FIXTURE_DIR"
+        BUNDLE_FILES=()
+        ACFS_SUPPORT_NOW_EPOCH=5000 ACFS_CHECKPOINT_STALE_SECONDS=60 capture_checkpoint_summary_json "$FIXTURE_DIR/support"
+    '
+}
+
+assert_no_sensitive_fault_lab_output() {
+    local fixture_dir="$1"
+    local file=""
+
+    for file in "$fixture_dir/rescue.json" "$fixture_dir/rescue.human.txt" "$fixture_dir/support/checkpoint_summary.json"; do
+        [[ -f "$file" ]] || return 1
+        ! grep -Eq 'ghp_|/home/alice|PRIVATE|password|token=' "$file" || {
+            echo "Sensitive content leaked in $file"
+            return 1
+        }
+    done
+}
+
+assert_rescue_outputs() {
+    local fixture_dir="$1"
+    local state_status="$2"
+    local recovery_command="$3"
+    local expected_status expected_severity expected_exit
+    local actual_json_exit actual_human_exit
+
+    IFS='|' read -r expected_status expected_severity expected_exit < <(expected_rescue_status_for_state "$state_status")
+    actual_json_exit="$(cat "$fixture_dir/rescue.exit")"
+    actual_human_exit="$(cat "$fixture_dir/rescue.human.exit")"
+
+    [[ "$actual_json_exit" -eq "$expected_exit" ]] || {
+        echo "Unexpected rescue JSON exit for $fixture_dir: $actual_json_exit"
+        return 1
+    }
+    [[ "$actual_human_exit" -eq "$expected_exit" ]] || {
+        echo "Unexpected rescue human exit for $fixture_dir: $actual_human_exit"
+        return 1
+    }
+
+    jq -e \
+        --arg status "$expected_status" \
+        --arg severity "$expected_severity" \
+        --arg command "$recovery_command" \
+        '
+          .status == $status and
+          .severity == $severity and
+          .next_command == $command and
+          (.evidence | length) >= 2
+        ' "$fixture_dir/rescue.json" >/dev/null || return 1
+
+    grep -Fq "Next command: $recovery_command" "$fixture_dir/rescue.human.txt" || return 1
+    grep -Fq "Evidence:" "$fixture_dir/rescue.human.txt" || return 1
+    ! grep -E 'rm -rf|git reset|git clean|delete|overwrite' "$fixture_dir/rescue.human.txt" >/dev/null || return 1
+}
+
+assert_checkpoint_summary() {
+    local fixture_dir="$1"
+    local state_status="$2"
+    local expected_status expected_severity
+
+    IFS='|' read -r expected_status expected_severity < <(expected_checkpoint_summary_for_state "$state_status")
+
+    jq -e \
+        --arg status "$expected_status" \
+        --arg severity "$expected_severity" \
+        '
+          .schema_version == 1 and
+          .status == $status and
+          .severity == $severity and
+          .redaction.raw_values_collected == false and
+          .redaction.raw_paths_collected == false and
+          .redaction.secrets_collected == false
+        ' "$fixture_dir/support/checkpoint_summary.json" >/dev/null || return 1
 }
 
 validate_fixture() {
@@ -313,7 +536,7 @@ validate_fixture() {
     jq -e '.schema_version == 1 and (.expected_log_substrings | length) >= 2 and (.support_evidence | length) >= 3' "$expected_json" >/dev/null || return 1
 
     case "$failure_class" in
-        upstream_installer_unavailable|checksum_mismatch|network_timeout|permission_denied|malformed_state|interrupted_resume)
+        upstream_installer_unavailable|checksum_mismatch|network_timeout|permission_denied|malformed_state|interrupted_resume|ubuntu_upgrade_interrupted)
             ;;
         *)
             echo "Unknown failure class: $failure_class"
@@ -325,6 +548,11 @@ validate_fixture() {
     [[ -n "$recommendation" && "$recommendation" != "null" ]] || return 1
     assert_safe_recovery_command "$recovery_command" || return 1
     assert_state_status "$fixture_dir" "$state_status" || return 1
+    run_rescue_lab_outputs "$fixture_dir" "$state_status"
+    capture_checkpoint_summary_for_fixture "$fixture_dir"
+    assert_rescue_outputs "$fixture_dir" "$state_status" "$recovery_command" || return 1
+    assert_checkpoint_summary "$fixture_dir" "$state_status" || return 1
+    assert_no_sensitive_fault_lab_output "$fixture_dir" || return 1
 
     local evidence
     mapfile -t evidence < <(jq -r '.support_evidence[]' "$expected_json")
@@ -364,6 +592,7 @@ test_all_fault_fixtures_satisfy_contract() {
     fixture_permission_denied
     fixture_malformed_state
     fixture_interrupted_resume
+    fixture_ubuntu_upgrade_interrupted
 
     for fixture_dir in "$ARTIFACT_DIR"/*; do
         [[ -d "$fixture_dir" ]] || continue
