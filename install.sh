@@ -7705,18 +7705,49 @@ Tip: use --print to see upstream install scripts that will be fetched."
         fi
     fi
 
-    local summary_content="Version: $ACFS_VERSION
-Mode:    $MODE
+    local target_ssh_command="ssh -i ~/.ssh/acfs_ed25519 ${TARGET_USER}@YOUR_SERVER_IP"
+    local target_ssh_copy_command="ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER}@YOUR_SERVER_IP"
+    local target_home_for_summary="${TARGET_HOME:-/home/$TARGET_USER}"
+    local target_ssh_repair_command="cat ~/.ssh/acfs_ed25519.pub | ssh root@YOUR_SERVER_IP \"install -d -m 700 -o $TARGET_USER -g $TARGET_USER $target_home_for_summary/.ssh && cat >> $target_home_for_summary/.ssh/authorized_keys && chown $TARGET_USER:$TARGET_USER $target_home_for_summary/.ssh/authorized_keys && chmod 600 $target_home_for_summary/.ssh/authorized_keys\""
 
-${tailscale_section:+Service Authentication:
+    local ssh_key_warning_section=""
+    if [[ "${ACFS_SSH_KEY_WARNING:-false}" == "true" ]]; then
+        ssh_key_warning_section="SSH key setup required for $TARGET_USER:
 
-$tailscale_section
+  You connected with a password, so no SSH key was copied to $TARGET_USER.
+  From your local machine, run:
+     $target_ssh_repair_command
 
-}Next steps:
+  If you already know the $TARGET_USER password and have ssh-copy-id, this also works:
+     $target_ssh_copy_command
+
+"
+    fi
+
+    local next_steps_content=""
+    if [[ "${ACFS_SSH_KEY_WARNING:-false}" == "true" ]]; then
+        next_steps_content="Next steps:
+
+  1. Set up SSH key access for $TARGET_USER using the command above.
+
+  2. Then reconnect as $TARGET_USER:
+     exit
+     $target_ssh_command
+
+  3. Run the onboarding tutorial:
+     onboard
+
+  4. Check everything is working:
+     acfs doctor
+
+  5. Start your agent cockpit:
+     ntm"
+    else
+        next_steps_content="Next steps:
 
   1. If you logged in as root, reconnect as $TARGET_USER:
      exit
-     ssh $TARGET_USER@YOUR_SERVER_IP
+     $target_ssh_command
 
   2. Run the onboarding tutorial:
      onboard
@@ -7726,6 +7757,16 @@ $tailscale_section
 
   4. Start your agent cockpit:
      ntm"
+    fi
+
+    local summary_content="Version: $ACFS_VERSION
+Mode:    $MODE
+
+${tailscale_section:+Service Authentication:
+
+$tailscale_section
+
+}$ssh_key_warning_section$next_steps_content"
 
     {
         if [[ "$HAS_GUM" == "true" ]]; then
@@ -7776,9 +7817,14 @@ $summary_content"
                 echo ""
                 echo -e "  ${YELLOW}FROM YOUR LOCAL MACHINE, run:${NC}"
                 echo ""
-                echo -e "    ${BLUE}ssh-copy-id ${TARGET_USER}@YOUR_SERVER_IP${NC}"
+                echo -e "    ${BLUE}$target_ssh_repair_command${NC}"
                 echo ""
-                echo -e "  Or see the instructions printed earlier for manual setup."
+                echo -e "  This asks for the root password once, then installs your local"
+                echo -e "  ACFS public key for $TARGET_USER."
+                echo ""
+                echo -e "  ${YELLOW}If you already know the $TARGET_USER password and have ssh-copy-id:${NC}"
+                echo ""
+                echo -e "    ${BLUE}$target_ssh_copy_command${NC}"
                 echo -e "${RED}════════════════════════════════════════════════════════════${NC}"
                 echo ""
             fi
@@ -7792,7 +7838,7 @@ $summary_content"
                 echo "  1. If you logged in as root, reconnect as $TARGET_USER:"
             fi
             echo -e "     ${GRAY}exit${NC}"
-            echo -e "     ${GRAY}ssh ${TARGET_USER}@YOUR_SERVER_IP${NC}"
+            echo -e "     ${GRAY}$target_ssh_command${NC}"
             echo ""
             local step_num=2
             if [[ "${ACFS_SSH_KEY_WARNING:-false}" == "true" ]]; then

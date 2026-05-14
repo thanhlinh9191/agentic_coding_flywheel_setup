@@ -61,9 +61,18 @@ export default function VerifyKeyConnectionPage() {
 
   const effectiveUsername = sshUsername.trim() || "ubuntu";
   const userTarget = formatSshTarget(effectiveUsername, vpsIP);
+  const rootTarget = formatSshTarget("root", vpsIP);
   const userPrompt = `${effectiveUsername}@`;
   const sshKeyCommand = `ssh -i ~/.ssh/acfs_ed25519 ${userTarget}`;
   const sshKeyCommandWindows = `ssh -i $HOME\\.ssh\\acfs_ed25519 ${userTarget}`;
+  const userHome = effectiveUsername === "root" ? "/root" : `/home/${effectiveUsername}`;
+  const rootKeyRepairCommand = [
+    `cat ~/.ssh/acfs_ed25519.pub | ssh ${rootTarget}`,
+    `"install -d -m 700 -o ${effectiveUsername} -g ${effectiveUsername} ${userHome}/.ssh`,
+    `&& cat >> ${userHome}/.ssh/authorized_keys`,
+    `&& chown ${effectiveUsername}:${effectiveUsername} ${userHome}/.ssh/authorized_keys`,
+    `&& chmod 600 ${userHome}/.ssh/authorized_keys"`,
+  ].join(" ");
 
   return (
     <div className="space-y-8">
@@ -147,9 +156,15 @@ export default function VerifyKeyConnectionPage() {
         <h2 className="text-xl font-semibold">Troubleshooting</h2>
         <div className="space-y-3">
           <AlertCard variant="warning" title="Still asks for a password?">
-            If the installer&apos;s final summary showed an SSH-key follow-up command, run that command from your
-            local computer and then try this connection again. Re-running the installer is safe; exact duplicate
-            public key lines are skipped when ACFS copies keys.
+            <div className="space-y-2">
+              <p>
+                Copy your local ACFS public key into {effectiveUsername}, then try this connection again:
+              </p>
+              <CommandCard command={rootKeyRepairCommand} runLocation="local" />
+              <p className="text-xs text-muted-foreground">
+                This asks for the VPS root password once. ACFS skips exact duplicate public key lines on reruns.
+              </p>
+            </div>
           </AlertCard>
           <AlertCard variant="warning" title="Permission denied (publickey)">
             Your key file permissions may be too open. Fix with:

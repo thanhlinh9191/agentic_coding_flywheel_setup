@@ -12667,6 +12667,28 @@ EOF
     assert_success
 }
 
+@test "install.sh: completion summary reconnects with the ACFS SSH key" {
+    run grep -F 'target_ssh_command="ssh -i ~/.ssh/acfs_ed25519 ${TARGET_USER}@YOUR_SERVER_IP"' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'echo -e "     ${GRAY}$target_ssh_command${NC}"' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'ssh ${TARGET_USER}@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
+    assert_failure
+}
+
+@test "install.sh: password-only root summary includes macOS key repair" {
+    run grep -F 'ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER}@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'cat ~/.ssh/acfs_ed25519.pub | ssh root@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'ssh_key_warning_section' "$PROJECT_ROOT/install.sh"
+    assert_success
+}
+
 @test "Agent Mail readiness waits tolerate slow service startup" {
     run grep -F 'local am_max_wait=90' "$PROJECT_ROOT/install.sh"
     assert_success

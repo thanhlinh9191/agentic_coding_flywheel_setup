@@ -93,8 +93,8 @@ Contabo requires a root password during setup.
 
 If you don't have an SSH key yet:
 ```bash
-ssh-keygen -t ed25519 -C "your-email@example.com"
-cat ~/.ssh/id_ed25519.pub
+ssh-keygen -t ed25519 -C "acfs" -f ~/.ssh/acfs_ed25519 -N ""
+cat ~/.ssh/acfs_ed25519.pub
 ```
 
 ![Contabo Step 6: Add SSH key](screenshots/contabo-step6-add-ssh-key.png)
@@ -138,30 +138,27 @@ You'll be prompted to enter the root password from Step 5.
 
 ---
 
-## Step 10: Create Ubuntu User (Required for ACFS)
+## Step 10: Run the ACFS Installer
 
-ACFS expects an `ubuntu` user. Create it:
+Do not create the `ubuntu` user manually. Run ACFS from the initial `root` session:
 
 ```bash
-# Create user with sudo
-adduser ubuntu
-usermod -aG sudo ubuntu
-
-# Set up SSH for the new user
-mkdir -p /home/ubuntu/.ssh
-cp ~/.ssh/authorized_keys /home/ubuntu/.ssh/
-chown -R ubuntu:ubuntu /home/ubuntu/.ssh
-chmod 700 /home/ubuntu/.ssh
-chmod 600 /home/ubuntu/.ssh/authorized_keys
-
-# Enable passwordless sudo
-echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/ubuntu
+curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/install.sh | bash -s -- --yes --mode vibe
 ```
 
-Now reconnect as ubuntu:
+ACFS creates the `ubuntu` user, enables passwordless sudo for that user in vibe mode, and copies root SSH keys into `/home/ubuntu/.ssh/authorized_keys` when Contabo installed your SSH key for `root`.
+
+When the installer finishes, reconnect from your local machine:
+
 ```bash
 exit
-ssh ubuntu@YOUR_IP_ADDRESS
+ssh -i ~/.ssh/acfs_ed25519 ubuntu@YOUR_IP_ADDRESS
+```
+
+If Contabo only allowed password login and the installer prints an SSH-key follow-up warning, run this from your local machine. It asks for the Contabo root password once, then installs your ACFS public key for `ubuntu`:
+
+```bash
+cat ~/.ssh/acfs_ed25519.pub | ssh root@YOUR_IP_ADDRESS "install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh && cat >> /home/ubuntu/.ssh/authorized_keys && chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys && chmod 600 /home/ubuntu/.ssh/authorized_keys"
 ```
 
 ---
@@ -169,7 +166,7 @@ ssh ubuntu@YOUR_IP_ADDRESS
 ## Contabo-Specific Notes
 
 ### Default User
-Contabo uses `root` by default. You must create the `ubuntu` user manually (see Step 10).
+Contabo uses `root` by default. ACFS creates and configures the `ubuntu` user during Step 10.
 
 ### Provisioning Time
 Unlike other providers, Contabo takes 1-3 hours to provision. Be patient.
@@ -189,10 +186,10 @@ sudo ufw enable
 
 ## Next Step
 
-Once connected as `ubuntu`, run the ACFS installer:
+Once connected as `ubuntu`, run the ACFS doctor:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/install.sh | bash
+acfs doctor
 ```
 
 ---

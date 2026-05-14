@@ -71,6 +71,14 @@ export default function ReconnectUbuntuPage() {
   const rootTarget = formatSshTarget("root", vpsIP);
   const sshCommand = `ssh -i ~/.ssh/acfs_ed25519 ${userTarget}`;
   const sshCommandWindows = `ssh -i $HOME\\.ssh\\acfs_ed25519 ${userTarget}`;
+  const userHome = effectiveUsername === "root" ? "/root" : `/home/${effectiveUsername}`;
+  const rootKeyRepairCommand = [
+    `cat ~/.ssh/acfs_ed25519.pub | ssh ${rootTarget}`,
+    `"install -d -m 700 -o ${effectiveUsername} -g ${effectiveUsername} ${userHome}/.ssh`,
+    `&& cat >> ${userHome}/.ssh/authorized_keys`,
+    `&& chown ${effectiveUsername}:${effectiveUsername} ${userHome}/.ssh/authorized_keys`,
+    `&& chmod 600 ${userHome}/.ssh/authorized_keys"`,
+  ].join(" ");
 
   return (
     <div className="space-y-8">
@@ -176,11 +184,11 @@ export default function ReconnectUbuntuPage() {
                 </li>
               </ol>
               <p className="mt-3 font-medium text-foreground">
-                If you&apos;re being asked for a password, try connecting as root instead:
+                If you&apos;re being asked for a password, copy your key into {effectiveUsername} from your local terminal:
               </p>
-              <CommandCard command={`ssh ${rootTarget}`} runLocation="local" className="mt-2" />
+              <CommandCard command={rootKeyRepairCommand} runLocation="local" className="mt-2" />
               <p className="mt-2 text-xs text-muted-foreground">
-                Use the VPS root password (the one from your provider), then re-run the installer.
+                This asks for the VPS root password once. Then retry the SSH command above.
               </p>
             </div>
           </AlertCard>
