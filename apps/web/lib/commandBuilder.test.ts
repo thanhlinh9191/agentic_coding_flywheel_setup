@@ -22,6 +22,8 @@ describe("buildRootKeyRepairCommand", () => {
     expect(command).toContain("cat ~/.ssh/acfs_ed25519.pub | ssh root@203.0.113.42");
     expect(command).toContain("read -r acfs_pubkey");
     expect(command).toContain("test ! -L /home/dev-user/.ssh");
+    expect(command).toContain("tail -c 1 /home/dev-user/.ssh/authorized_keys");
+    expect(command).toContain("grep -qw 10");
     expect(command).toContain('if ! grep -qxF "\\$acfs_pubkey" /home/dev-user/.ssh/authorized_keys; then');
     expect(command).toContain('printf \'%s\\n\' "\\$acfs_pubkey" >> /home/dev-user/.ssh/authorized_keys');
     expect(command).not.toContain("cat >> /home/dev-user/.ssh/authorized_keys");

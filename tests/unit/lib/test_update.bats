@@ -12692,6 +12692,12 @@ EOF
     run grep -F 'test ! -L $target_home_for_summary/.ssh' "$PROJECT_ROOT/install.sh"
     assert_success
 
+    run grep -F 'tail -c 1 $target_authorized_keys_for_summary' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'grep -qw 10' "$PROJECT_ROOT/install.sh"
+    assert_success
+
     run grep -F '&& cat >> $target_home_for_summary/.ssh/authorized_keys' "$PROJECT_ROOT/install.sh"
     assert_failure
 
@@ -12736,6 +12742,22 @@ EOF
 
     run grep -F 'SSH key already present; not adding duplicate' "$PROJECT_ROOT/scripts/lib/user.sh"
     assert_success
+}
+
+@test "user.sh: SSH fallback guidance uses idempotent key commands" {
+    run grep -F 'tail -c 1 ${target_home}/.ssh/authorized_keys' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'if ! grep -qxF' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+    [[ "$output" == *'acfs_pubkey'* ]]
+    [[ "$output" == *'${target_home}/.ssh/authorized_keys'* ]]
+
+    run grep -F 'cat >> ${target_home}/.ssh/authorized_keys' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_failure
+
+    run grep -F "echo 'your-key-here' >> ~/.ssh/authorized_keys" "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_failure
 }
 
 @test "user.sh: SSH prompt refuses symlinked key paths" {

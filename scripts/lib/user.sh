@@ -376,17 +376,11 @@ migrate_ssh_keys() {
             echo ""
             echo "  EASIEST FIX - from your LOCAL machine, run:"
             echo ""
-            echo "    ssh-copy-id ${target}@YOUR_SERVER_IP"
+            echo "    cat ~/.ssh/acfs_ed25519.pub | ssh root@YOUR_SERVER_IP \"read -r acfs_pubkey && test ! -L ${target_home}/.ssh && install -d -m 700 -o ${target} -g ${target} ${target_home}/.ssh && test ! -L ${target_home}/.ssh/authorized_keys && touch ${target_home}/.ssh/authorized_keys && { [ ! -s ${target_home}/.ssh/authorized_keys ] || tail -c 1 ${target_home}/.ssh/authorized_keys | od -An -t u1 | grep -qw 10 || printf '\\n' >> ${target_home}/.ssh/authorized_keys; } && if ! grep -qxF \"\\\$acfs_pubkey\" ${target_home}/.ssh/authorized_keys; then printf '%s\\n' \"\\\$acfs_pubkey\" >> ${target_home}/.ssh/authorized_keys; fi && chown ${target}:${target} ${target_home}/.ssh/authorized_keys && chmod 600 ${target_home}/.ssh/authorized_keys\""
             echo ""
-            echo "  Or manually: SSH in as root and run these commands:"
+            echo "  If you know the ${target} password and have ssh-copy-id, this can also work:"
             echo ""
-            echo "    mkdir -p ${target_home}/.ssh"
-            echo "    cat >> ${target_home}/.ssh/authorized_keys << 'EOF'"
-            echo "    YOUR_PUBLIC_KEY_HERE"
-            echo "    EOF"
-            echo "    chown -R ${target}:${target} ${target_home}/.ssh"
-            echo "    chmod 700 ${target_home}/.ssh"
-            echo "    chmod 600 ${target_home}/.ssh/authorized_keys"
+            echo "    ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${target}@YOUR_SERVER_IP"
             echo ""
             echo "════════════════════════════════════════════════════════════"
             echo ""
@@ -430,7 +424,7 @@ migrate_ssh_keys() {
         # We use a robust check that handles files without any newlines at all.
         if [[ -s "$target_keys" ]]; then
             local last_char
-            last_char=$(tail -c 1 "$target_keys" | od -An -t u1 | tr -d ' ')
+            last_char=$($SUDO tail -c 1 "$target_keys" 2>/dev/null | od -An -t u1 | tr -d ' ' || true)
             if [[ "$last_char" != "10" ]]; then
                 # Last char is not \n (ASCII 10)
                 printf '\n' | $SUDO tee -a "$target_keys" >/dev/null
@@ -671,8 +665,8 @@ prompt_ssh_key() {
             log_detail "Keeping existing SSH keys"
         else
             log_warn "SSH key setup skipped"
-            log_detail "You can add your key later by running:"
-            log_detail "  echo 'your-key-here' >> ~/.ssh/authorized_keys"
+            log_detail "From your local machine, you can add your key later by running:"
+            log_detail "  ssh-copy-id -i ~/.ssh/acfs_ed25519.pub root@<ip>"
         fi
         return 0
     fi

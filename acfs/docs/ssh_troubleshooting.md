@@ -46,7 +46,12 @@ Your public key wasn't added during VPS setup.
 **Fix options:**
 - **If you have console access:** Log into your VPS provider's web console, then add your key manually:
   ```bash
-  echo "YOUR_PUBLIC_KEY" >> ~/.ssh/authorized_keys
+  mkdir -p ~/.ssh
+  chmod 700 ~/.ssh
+  touch ~/.ssh/authorized_keys
+  pubkey='YOUR_PUBLIC_KEY'
+  { [ ! -s ~/.ssh/authorized_keys ] || tail -c 1 ~/.ssh/authorized_keys | od -An -t u1 | grep -qw 10 || printf '\n' >> ~/.ssh/authorized_keys; }
+  grep -qxF "$pubkey" ~/.ssh/authorized_keys || printf '%s\n' "$pubkey" >> ~/.ssh/authorized_keys
   chmod 600 ~/.ssh/authorized_keys
   ```
 - **If creating a new VPS:** Make sure to paste your public key (the `.pub` file contents) during setup.
