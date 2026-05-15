@@ -129,7 +129,7 @@ const ISSUES: Omit<TroubleshootingIssue, "searchable">[] = [
       "Permission denied (publickey,keyboard-interactive)",
     ],
     causes: [
-      "SSH key not added to VPS",
+      "The installer did not finish adding the ACFS key to the configured SSH user",
       "Using root for a post-install key-based login instead of the configured SSH user",
       "SSH key file has wrong permissions",
       "Using wrong SSH key file",
@@ -160,8 +160,16 @@ const ISSUES: Omit<TroubleshootingIssue, "searchable">[] = [
           "Then run the installer so ACFS can set up key-based login for your normal SSH user",
         ],
       },
+      {
+        title: "Run the installer key follow-up command",
+        steps: [
+          "If the installer finished but warned that no root SSH key was available, use the exact follow-up command printed in the installer summary",
+          "Run that command from your local machine; it asks for the VPS root password once",
+          "After it completes, retry the key-based SSH command for ubuntu or your configured SSH user",
+        ],
+      },
     ],
-    prevention: "Always verify your SSH key was added correctly during VPS creation.",
+    prevention: "Use password authentication for the first root login, then follow the installer summary before switching to key-based SSH.",
   },
   {
     id: "session-disconnected",
