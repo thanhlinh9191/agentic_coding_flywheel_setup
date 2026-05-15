@@ -417,6 +417,7 @@ function shellQuote(str: string): string {
  * - TARGET_HOME
  * - TARGET_USER
  * - TARGET_USER with Ubuntu default fallback
+ * - $$ for per-process temp directories
  *
  * SECURITY:
  * - We do NOT use a blacklist (e.g. banning `$(`).
@@ -430,7 +431,7 @@ function shellQuoteVerifiedInstallerArg(str: string): string {
   // Regex to capture allowed variables.
   // Order matters: match longest tokens first (${VAR} before $VAR).
   // capturing group () is included in split output.
-  const variablePattern = /(\$\{TARGET_USER:-ubuntu\}|\$\{TARGET_HOME\}|\$TARGET_HOME|\$\{TARGET_USER\}|\$TARGET_USER)/g;
+  const variablePattern = /(\$\{TARGET_USER:-ubuntu\}|\$\{TARGET_HOME\}|\$TARGET_HOME|\$\{TARGET_USER\}|\$TARGET_USER|\$\$)/g;
 
   const parts = str.split(variablePattern);
 
@@ -442,7 +443,8 @@ function shellQuoteVerifiedInstallerArg(str: string): string {
         part === '${TARGET_HOME}' ||
         part === '$TARGET_HOME' ||
         part === '${TARGET_USER}' ||
-        part === '$TARGET_USER'
+        part === '$TARGET_USER' ||
+        part === '$$'
       ) {
         return `"${part}"`;
       }
@@ -511,6 +513,17 @@ function buildVerifiedInstallerPipe(module: Module): string {
   }
 
   return parts.join(' ');
+}
+
+function verifiedInstallerTmpdirEnvValue(module: Module): string | null {
+  if (module.run_as !== 'target_user') return null;
+
+  const envVars = module.verified_installer?.env ?? [];
+  const tmpdirEnv = envVars.find((envVar) => envVar.startsWith('TMPDIR='));
+  if (!tmpdirEnv) return null;
+
+  const value = tmpdirEnv.slice('TMPDIR='.length);
+  return value.length > 0 ? value : null;
 }
 
 /**
@@ -1166,14 +1179,46 @@ function generateVerifiedInstallerSnippet(module: Module): string[] {
     execCmd = buildVerifiedInstallerPipe(module);
   }
 
+  const tmpdirEnvValue = verifiedInstallerTmpdirEnvValue(module);
+  const hasTmpdirEnv = Boolean(tmpdirEnvValue);
   const lines: string[] = [
     '# Try security-verified install (no unverified fallback; fail closed)',
     'local install_success=false',
+    ...(hasTmpdirEnv ? ['local verified_installer_env_ready=true'] : []),
     '',
   ];
 
+  if (tmpdirEnvValue) {
+    lines.push(
+      `local verified_installer_tmpdir=${shellQuoteVerifiedInstallerArg(tmpdirEnvValue)}`,
+      'if [[ "$verified_installer_tmpdir" == *[[:space:]]* ]]; then',
+      `    log_error "${escapeBash(module.id)}: installer TMPDIR contains whitespace: $verified_installer_tmpdir"`,
+      '    verified_installer_env_ready=false',
+      'elif ! run_as_target mkdir -p "$verified_installer_tmpdir"; then',
+      `    log_error "${escapeBash(module.id)}: failed to prepare installer TMPDIR: $verified_installer_tmpdir"`,
+      '    verified_installer_env_ready=false',
+      'fi',
+      ''
+    );
+  }
+
+  const securityInitCondition = hasTmpdirEnv
+    ? 'if [[ "$verified_installer_env_ready" = "true" ]] && acfs_security_init; then'
+    : 'if acfs_security_init; then';
+  const securityInitFailureLines = hasTmpdirEnv
+    ? [
+        '    if [[ "$verified_installer_env_ready" != "true" ]]; then',
+        `        log_error "${escapeBash(module.id)}: verified installer environment setup failed"`,
+        '    else',
+        `        log_error "${escapeBash(module.id)}: acfs_security_init failed - check security.sh and checksums.yaml"`,
+        '    fi',
+      ]
+    : [
+        `    log_error "${escapeBash(module.id)}: acfs_security_init failed - check security.sh and checksums.yaml"`,
+      ];
+
   const verifiedInstallAttemptLines: string[] = [
-    'if acfs_security_init; then',
+    securityInitCondition,
     '    local known_installers_decl=""',
     '    # Check if KNOWN_INSTALLERS is available as an associative array (declare -A)',
     '    known_installers_decl="$(declare -p KNOWN_INSTALLERS 2>/dev/null || true)"',
@@ -1207,7 +1252,7 @@ function generateVerifiedInstallerSnippet(module: Module): string[] {
     `        log_error "${escapeBash(module.id)}: KNOWN_INSTALLERS array not available"`,
     '    fi',
     'else',
-    `    log_error "${escapeBash(module.id)}: acfs_security_init failed - check security.sh and checksums.yaml"`,
+    ...securityInitFailureLines,
     'fi',
   ];
 

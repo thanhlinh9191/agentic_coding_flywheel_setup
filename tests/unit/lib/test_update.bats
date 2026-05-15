@@ -1453,6 +1453,61 @@ EOF
     [[ "$(cat "$HOME/mcp-agent-mail-passthrough.args")" == "update_run_in_target_context AM_INSTALL_SKIP_MCP_SETUP=1 bash "* ]]
 }
 
+@test "update_stack runs CASS through target tmpdir wrapper" {
+    local calls_file="$HOME/verified-installer-calls"
+
+    QUIET=true
+    VERBOSE=false
+    DRY_RUN=false
+    UPDATE_STACK=true
+    ABORT_ON_FAILURE=false
+    ACFS_UPDATE_RETRY_MAX_ATTEMPTS=1
+    UPDATE_LOG_FILE="$HOME/update.log"
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+    SKIP_COUNT=0
+
+    declare -gA KNOWN_INSTALLERS=([mcp_agent_mail]="https://example.test/install-am.sh")
+
+    update_require_security() { return 0; }
+    get_checksum() { printf '%s\n' "abc123"; }
+    verify_checksum() {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'exit 0'
+    }
+    update_target_user() { id -un; }
+    update_target_home() { printf '%s\n' "$HOME"; }
+    update_run_logged_passthrough() { return 0; }
+    update_source_stack_lib() { return 0; }
+    _stack_repair_agent_mail_cli_symlink() { return 0; }
+    _stack_configure_agent_mail_service() { return 0; }
+    _stack_wait_for_agent_mail_health() { return 0; }
+    capture_version_before() { :; }
+    capture_version_after() { return 1; }
+    update_binary_exists() { return 1; }
+    update_run_verified_installer() {
+        printf 'plain:%s\n' "$*" >> "$calls_file"
+        return 0
+    }
+    update_run_verified_installer_with_env() {
+        printf 'env:%s\n' "$*" >> "$calls_file"
+        return 0
+    }
+    update_run_verified_installer_with_target_tmpdir() {
+        printf 'tmp:%s\n' "$*" >> "$calls_file"
+        return 0
+    }
+    update_run_slb_source_install() { return 0; }
+    update_run_fsfs_installer() { return 0; }
+
+    run update_stack
+    assert_success
+    run grep -Fx "tmp:cass --easy-mode --verify" "$calls_file"
+    assert_success
+    run grep -Fx "plain:cass --easy-mode --verify" "$calls_file"
+    assert_failure
+}
+
 @test "update_stack honors abort-on-failure for MCP Agent Mail target-home failure" {
     QUIET=true
     VERBOSE=false
@@ -6267,6 +6322,16 @@ EOF_DASHBOARD_TRAP
     [[ ! -e "$marker" ]] || fail "_stack_run_as_user executed target PATH as shell source"
 }
 
+@test "stack fallback CASS installer uses target-owned TMPDIR" {
+    local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
+
+    run grep -F '_stack_run_verified_installer_with_target_tmpdir "$tool" --easy-mode --verify' "$stack_lib"
+    assert_success
+
+    run grep -F 'tmpdir="$TARGET_HOME/.cache/acfs/installer-tmp/${tool}-$$"' "$stack_lib"
+    assert_success
+}
+
 @test "stack helpers can trust explicitly resolved TARGET_HOME for doctor/update repairs" {
     source_lib "stack"
 
@@ -10681,6 +10746,35 @@ SECURITY
     run update_run_verified_installer_with_env "test_tool" "TEST-ENV=value" "--flag"
     assert_failure
     assert_output --partial "Invalid inline env assignment"
+}
+
+@test "update verified installer with target tmpdir prepares target-owned TMPDIR" {
+    TEST_TARGET_HOME="$BATS_TEST_TMPDIR/target-home"
+    TEST_PREPARED_FILE="$BATS_TEST_TMPDIR/prepared-tmpdir"
+    TEST_INSTALLER_ARGS="$BATS_TEST_TMPDIR/installer-args"
+    mkdir -p "$TEST_TARGET_HOME"
+
+    update_target_user() { printf '%s\n' "tester"; }
+    update_target_home() { printf '%s\n' "$TEST_TARGET_HOME"; }
+    update_run_in_target_context() {
+        [[ "${1:-}" == "" ]]
+        [[ "${2:-}" == "mkdir" ]]
+        [[ "${3:-}" == "-p" ]]
+        printf '%s\n' "${4:-}" > "$TEST_PREPARED_FILE"
+        return 0
+    }
+    update_run_verified_installer_with_env() {
+        printf '%s\n' "$*" > "$TEST_INSTALLER_ARGS"
+        return 0
+    }
+
+    run update_run_verified_installer_with_target_tmpdir "cass" "--easy-mode" "--verify"
+    assert_success
+
+    local prepared_tmpdir
+    prepared_tmpdir="$(cat "$TEST_PREPARED_FILE")"
+    [[ "$prepared_tmpdir" == "$TEST_TARGET_HOME/.cache/acfs/installer-tmp/cass-"* ]]
+    [[ "$(cat "$TEST_INSTALLER_ARGS")" == "cass TMPDIR=$prepared_tmpdir --easy-mode --verify" ]]
 }
 
 @test "update PCR installer uses install repair path and verifies doctor state" {

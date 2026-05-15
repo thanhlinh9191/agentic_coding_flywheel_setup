@@ -833,6 +833,52 @@ _stack_run_verified_installer() {
     _stack_run_verified_installer_with_env "$tool" "" "$@"
 }
 
+_stack_prepare_target_installer_tmpdir() {
+    local tool="${1:-}"
+    local tmpdir=""
+    local tmpdir_q=""
+
+    [[ -n "$tool" ]] || {
+        log_warn "_stack_prepare_target_installer_tmpdir requires a tool name"
+        return 1
+    }
+    case "$tool" in
+        .|..|*[!A-Za-z0-9._+-]*)
+            log_warn "Invalid tool name for installer TMPDIR: $tool"
+            return 1
+            ;;
+    esac
+
+    if [[ -z "${TARGET_HOME:-}" || "$TARGET_HOME" != /* || "$TARGET_HOME" == "/" ]]; then
+        log_warn "Cannot prepare installer TMPDIR without a valid TARGET_HOME"
+        return 1
+    fi
+
+    tmpdir="$TARGET_HOME/.cache/acfs/installer-tmp/${tool}-$$"
+    printf -v tmpdir_q '%q' "$tmpdir"
+    if _stack_run_as_user "mkdir -p $tmpdir_q"; then
+        printf '%s\n' "$tmpdir"
+        return 0
+    fi
+
+    log_warn "Failed to prepare installer TMPDIR: $tmpdir"
+    return 1
+}
+
+_stack_run_verified_installer_with_target_tmpdir() {
+    if [[ $# -lt 1 ]]; then
+        log_warn "_stack_run_verified_installer_with_target_tmpdir requires a tool name"
+        return 1
+    fi
+
+    local tool="$1"
+    shift
+    local tmpdir=""
+
+    tmpdir="$(_stack_prepare_target_installer_tmpdir "$tool")" || return $?
+    _stack_run_verified_installer_with_env "$tool" "TMPDIR=$tmpdir" "$@"
+}
+
 _stack_fsfs_linux_target_triple() {
     local arch=""
 
@@ -1730,7 +1776,7 @@ install_cass() {
     log_detail "Installing ${STACK_NAMES[$tool]}..."
 
     # CASS uses --easy-mode --verify for simplified setup with verification
-    if _stack_run_installer "$tool" --easy-mode --verify; then
+    if _stack_run_verified_installer_with_target_tmpdir "$tool" --easy-mode --verify; then
         if _stack_is_installed "$tool"; then
             log_success "${STACK_NAMES[$tool]} installed"
             return 0

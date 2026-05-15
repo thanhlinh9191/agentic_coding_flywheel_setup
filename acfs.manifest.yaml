@@ -1917,6 +1917,7 @@ modules:
     verified_installer:
       tool: cass
       runner: bash
+      env: ["TMPDIR=$TARGET_HOME/.cache/acfs/installer-tmp/cass-$$"]
       args: ["--easy-mode", "--verify"]
     install: []
     verify:

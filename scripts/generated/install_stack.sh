@@ -1391,8 +1391,18 @@ install_stack_cass() {
         if ! {
             # Try security-verified install (no unverified fallback; fail closed)
             local install_success=false
+            local verified_installer_env_ready=true
 
-            if acfs_security_init; then
+            local verified_installer_tmpdir="$TARGET_HOME"'/.cache/acfs/installer-tmp/cass-'"$$"
+            if [[ "$verified_installer_tmpdir" == *[[:space:]]* ]]; then
+                log_error "stack.cass: installer TMPDIR contains whitespace: $verified_installer_tmpdir"
+                verified_installer_env_ready=false
+            elif ! run_as_target mkdir -p "$verified_installer_tmpdir"; then
+                log_error "stack.cass: failed to prepare installer TMPDIR: $verified_installer_tmpdir"
+                verified_installer_env_ready=false
+            fi
+
+            if [[ "$verified_installer_env_ready" = "true" ]] && acfs_security_init; then
                 local known_installers_decl=""
                 # Check if KNOWN_INSTALLERS is available as an associative array (declare -A)
                 known_installers_decl="$(declare -p KNOWN_INSTALLERS 2>/dev/null || true)"
@@ -1409,7 +1419,7 @@ install_stack_cass() {
                     fi
 
                     if [[ -n "$url" ]] && [[ -n "$expected_sha256" ]]; then
-                        if verify_checksum "$url" "$expected_sha256" "$tool" | run_as_target_runner 'bash' '-s' '--' '--easy-mode' '--verify'; then
+                        if verify_checksum "$url" "$expected_sha256" "$tool" | run_as_target_runner 'env' 'TMPDIR='"$TARGET_HOME"'/.cache/acfs/installer-tmp/cass-'"$$" 'bash' '-s' '--' '--easy-mode' '--verify'; then
                             install_success=true
                         else
                             log_error "stack.cass: verify_checksum or installer execution failed"
@@ -1426,7 +1436,11 @@ install_stack_cass() {
                     log_error "stack.cass: KNOWN_INSTALLERS array not available"
                 fi
             else
-                log_error "stack.cass: acfs_security_init failed - check security.sh and checksums.yaml"
+                if [[ "$verified_installer_env_ready" != "true" ]]; then
+                    log_error "stack.cass: verified installer environment setup failed"
+                else
+                    log_error "stack.cass: acfs_security_init failed - check security.sh and checksums.yaml"
+                fi
             fi
 
             # Verified install is required - no fallback

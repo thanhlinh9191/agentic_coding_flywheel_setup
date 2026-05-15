@@ -3717,6 +3717,58 @@ update_run_verified_installer() {
     update_run_verified_installer_with_env "$tool" "" "$@"
 }
 
+update_prepare_target_installer_tmpdir() {
+    local tool="${1:-}"
+    local target_user=""
+    local target_home=""
+    local tmpdir=""
+
+    [[ -n "$tool" ]] || {
+        echo "update_prepare_target_installer_tmpdir requires a tool name" >&2
+        return 1
+    }
+    case "$tool" in
+        .|..|*[!A-Za-z0-9._+-]*)
+            echo "Invalid tool name for installer TMPDIR: $tool" >&2
+            return 1
+            ;;
+    esac
+
+    target_user="$(update_target_user 2>/dev/null || true)"
+    update_validate_target_user "$target_user" || return 1
+
+    target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
+    if [[ -z "$target_home" || "$target_home" != /* || "$target_home" == "/" ]]; then
+        echo "Unable to resolve TARGET_HOME for '$target_user'; cannot prepare installer TMPDIR" >&2
+        return 1
+    fi
+
+    tmpdir="$target_home/.cache/acfs/installer-tmp/${tool}-$$"
+    case "$tmpdir" in
+        *[[:space:]]*)
+            echo "Unable to use installer TMPDIR with whitespace: $tmpdir" >&2
+            return 1
+            ;;
+    esac
+
+    update_run_in_target_context "" mkdir -p "$tmpdir" || return $?
+    printf '%s\n' "$tmpdir"
+}
+
+update_run_verified_installer_with_target_tmpdir() {
+    if [[ $# -lt 1 ]]; then
+        echo "update_run_verified_installer_with_target_tmpdir requires a tool name" >&2
+        return 1
+    fi
+
+    local tool="$1"
+    shift
+    local tmpdir=""
+
+    tmpdir="$(update_prepare_target_installer_tmpdir "$tool")" || return $?
+    update_run_verified_installer_with_env "$tool" "TMPDIR=$tmpdir" "$@"
+}
+
 update_run_verified_installer_or_existing_on_transient() {
     local desc="$1"
     local installer_key="$2"
@@ -5469,8 +5521,10 @@ update_stack() {
     # Beads Rust (br) - local issue tracker CLI - always install/update
     run_cmd "Beads Rust" update_run_verified_installer br
 
-    # CASS - always install/update
-    run_cmd "CASS" update_run_verified_installer cass --easy-mode --verify
+    # CASS - always install/update. Its upstream installer uses a lock inside
+    # TMPDIR; give it an ACFS-owned target-user temp root so stale shared
+    # /tmp or /data/tmp locks cannot make only CASS fail during `acfs update`.
+    run_cmd "CASS" update_run_verified_installer_with_target_tmpdir cass --easy-mode --verify
 
     # CASS Memory - always install/update
     run_cmd "CASS Memory" update_run_verified_installer cm --easy-mode --verify

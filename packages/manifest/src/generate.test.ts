@@ -310,6 +310,20 @@ describe('Generated verified installer args', () => {
     );
   });
 
+  test('stack.cass prepares and uses a target-owned installer TMPDIR', () => {
+    const stackPath = resolve(GENERATED_DIR, 'install_stack.sh');
+    expect(existsSync(stackPath)).toBe(true);
+    const stackContent = readFileSync(stackPath, 'utf-8');
+
+    expect(stackContent).toContain(
+      `local verified_installer_tmpdir="$TARGET_HOME"'/.cache/acfs/installer-tmp/cass-'"$$"`
+    );
+    expect(stackContent).toContain('run_as_target mkdir -p "$verified_installer_tmpdir"');
+    expect(stackContent).toContain(
+      "run_as_target_runner 'env' 'TMPDIR='\"$TARGET_HOME\"'/.cache/acfs/installer-tmp/cass-'\"$$\" 'bash' '-s' '--' '--easy-mode' '--verify'"
+    );
+  });
+
   test('agent wrapper/link install heredocs include primary-bin helpers in child shell', () => {
     const agentsPath = resolve(GENERATED_DIR, 'install_agents.sh');
     expect(existsSync(agentsPath)).toBe(true);
