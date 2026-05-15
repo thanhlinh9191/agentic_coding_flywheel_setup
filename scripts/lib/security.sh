@@ -602,12 +602,59 @@ acfs_offline_pack_path_is_safe() {
     local rel_path="${1:-}"
 
     case "$rel_path" in
-        ""|.|..|/*|../*|*/..|*"/../"*|*"/./"*|*"/")
+        ""|.|..|/*|./*|../*|*/..|*"/../"*|*"/./"*|*"/")
             return 1
             ;;
     esac
 
     return 0
+}
+
+acfs_offline_pack_resolve_existing_path() {
+    local path="${1:-}"
+    local realpath_bin=""
+    local dir=""
+    local base=""
+
+    [[ -n "$path" && -e "$path" ]] || return 1
+
+    realpath_bin="$(acfs_security_system_binary_path realpath 2>/dev/null || true)"
+    if [[ -n "$realpath_bin" ]]; then
+        "$realpath_bin" -e -- "$path"
+        return $?
+    fi
+
+    if [[ -d "$path" ]]; then
+        (cd "$path" 2>/dev/null && pwd -P)
+        return $?
+    fi
+
+    case "$path" in
+        */*)
+            dir="${path%/*}"
+            base="${path##*/}"
+            ;;
+        *)
+            dir="."
+            base="$path"
+            ;;
+    esac
+
+    (cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$base")
+}
+
+acfs_offline_pack_artifact_is_contained() {
+    local pack_root="${1:-}"
+    local artifact_file="${2:-}"
+    local pack_root_real=""
+    local artifact_real=""
+
+    pack_root_real="$(acfs_offline_pack_resolve_existing_path "$pack_root" 2>/dev/null || true)"
+    artifact_real="$(acfs_offline_pack_resolve_existing_path "$artifact_file" 2>/dev/null || true)"
+
+    [[ -n "$pack_root_real" && "$pack_root_real" != "/" ]] || return 1
+    [[ -n "$artifact_real" ]] || return 1
+    [[ "$artifact_real" == "$pack_root_real/"* ]]
 }
 
 acfs_offline_pack_validate_manifest() {
@@ -792,7 +839,15 @@ acfs_offline_pack_verify_artifact() {
     fi
 
     artifact_file="$pack_root/$rel_path"
-    if [[ ! -f "$artifact_file" || -L "$artifact_file" ]]; then
+    if [[ ! -f "$artifact_file" ]]; then
+        acfs_offline_pack_error "pack_unbundled_required_module" "$name" "artifact file is missing or unsafe: $rel_path"
+        return 1
+    fi
+    if ! acfs_offline_pack_artifact_is_contained "$pack_root" "$artifact_file"; then
+        acfs_offline_pack_error "pack_path_escape" "$name" "artifact path resolves outside the pack: $rel_path"
+        return 1
+    fi
+    if [[ -L "$artifact_file" ]]; then
         acfs_offline_pack_error "pack_unbundled_required_module" "$name" "artifact file is missing or unsafe: $rel_path"
         return 1
     fi
