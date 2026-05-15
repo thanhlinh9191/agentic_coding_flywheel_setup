@@ -7753,6 +7753,7 @@ Tip: use --print to see upstream install scripts that will be fetched."
 
     local target_ssh_command="ssh -i ~/.ssh/acfs_ed25519 ${TARGET_USER}@YOUR_SERVER_IP"
     local target_ssh_copy_command="ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER}@YOUR_SERVER_IP"
+    local target_user_ssh_repair_command="cat ~/.ssh/acfs_ed25519.pub | ssh ${TARGET_USER}@YOUR_SERVER_IP \"read -r acfs_pubkey && test ! -L ~/.ssh && install -d -m 700 ~/.ssh && chmod 700 ~/.ssh && test ! -L ~/.ssh/authorized_keys && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && { [ ! -s ~/.ssh/authorized_keys ] || tail -c 1 ~/.ssh/authorized_keys | od -An -t u1 | grep -qw 10 || printf '\\n' >> ~/.ssh/authorized_keys; } && if ! grep -qxF \\\"\\\$acfs_pubkey\\\" ~/.ssh/authorized_keys; then printf '%s\\n' \\\"\\\$acfs_pubkey\\\" >> ~/.ssh/authorized_keys; fi\""
     local target_home_for_summary="${TARGET_HOME:-/home/$TARGET_USER}"
     local target_authorized_keys_for_summary="$target_home_for_summary/.ssh/authorized_keys"
     local target_ssh_repair_command="cat ~/.ssh/acfs_ed25519.pub | ssh root@YOUR_SERVER_IP \"read -r acfs_pubkey && test ! -L $target_home_for_summary/.ssh && install -d -m 700 -o $TARGET_USER -g $TARGET_USER $target_home_for_summary/.ssh && test ! -L $target_authorized_keys_for_summary && touch $target_authorized_keys_for_summary && { [ ! -s $target_authorized_keys_for_summary ] || tail -c 1 $target_authorized_keys_for_summary | od -An -t u1 | grep -qw 10 || printf '\\n' >> $target_authorized_keys_for_summary; } && if ! grep -qxF \\\"\\\$acfs_pubkey\\\" $target_authorized_keys_for_summary; then printf '%s\\n' \\\"\\\$acfs_pubkey\\\" >> $target_authorized_keys_for_summary; fi && chown $TARGET_USER:$TARGET_USER $target_authorized_keys_for_summary && chmod 600 $target_authorized_keys_for_summary\""
@@ -7762,7 +7763,10 @@ Tip: use --print to see upstream install scripts that will be fetched."
         ssh_key_warning_section="SSH key setup required for $TARGET_USER:
 
   You connected with a password, so no SSH key was copied to $TARGET_USER.
-  From your local machine, run:
+  From your local machine, first try this if you can still sign in as $TARGET_USER:
+     $target_user_ssh_repair_command
+
+  If that cannot connect, use the root fallback:
      $target_ssh_repair_command
 
   If you already know the $TARGET_USER password and have ssh-copy-id, this also works:
@@ -7862,7 +7866,13 @@ $summary_content"
                 echo -e "  to the $TARGET_USER user. You won't be able to SSH as $TARGET_USER"
                 echo -e "  until you set up SSH key access."
                 echo ""
-                echo -e "  ${YELLOW}FROM YOUR LOCAL MACHINE, run:${NC}"
+                echo -e "  ${YELLOW}FROM YOUR LOCAL MACHINE, first try this if you can still sign in as $TARGET_USER:${NC}"
+                echo ""
+                echo -e "    ${BLUE}$target_user_ssh_repair_command${NC}"
+                echo ""
+                echo -e "  ${GRAY}This uses the $TARGET_USER account and does not ask for the VPS root password.${NC}"
+                echo ""
+                echo -e "  ${YELLOW}If that cannot connect, use the root fallback:${NC}"
                 echo ""
                 echo -e "    ${BLUE}$target_ssh_repair_command${NC}"
                 echo ""

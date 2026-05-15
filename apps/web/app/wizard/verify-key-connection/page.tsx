@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CommandCard } from "@/components/command-card";
 import { AlertCard, OutputPreview } from "@/components/alert-card";
-import { buildRootKeyRepairCommand, formatSshTarget } from "@/lib/commandBuilder";
+import { buildRootKeyRepairCommand, buildUserKeyRepairCommand, formatSshTarget } from "@/lib/commandBuilder";
 import { markStepComplete } from "@/lib/wizardSteps";
 import { useWizardAnalytics } from "@/lib/hooks/useWizardAnalytics";
 import { useSSHUsername, useVPSIP } from "@/lib/userPreferences";
@@ -64,6 +64,7 @@ export default function VerifyKeyConnectionPage() {
   const userPrompt = `${effectiveUsername}@`;
   const sshKeyCommand = `ssh -i ~/.ssh/acfs_ed25519 ${userTarget}`;
   const sshKeyCommandWindows = `ssh -i $HOME\\.ssh\\acfs_ed25519 ${userTarget}`;
+  const userKeyRepairCommand = buildUserKeyRepairCommand(effectiveUsername, vpsIP);
   const rootKeyRepairCommand = buildRootKeyRepairCommand(effectiveUsername, vpsIP);
 
   return (
@@ -150,7 +151,14 @@ export default function VerifyKeyConnectionPage() {
           <AlertCard variant="warning" title="Still asks for a password?">
             <div className="space-y-2">
               <p>
-                Copy your local ACFS public key into {effectiveUsername}, then try this connection again:
+                If you can still sign in as {effectiveUsername}, copy your local ACFS public key into that account:
+              </p>
+              <CommandCard command={userKeyRepairCommand} runLocation="local" />
+              <p className="text-xs text-muted-foreground">
+                This uses the {effectiveUsername} account and does not ask for the VPS root password.
+              </p>
+              <p className="pt-2">
+                If that cannot connect, use the root fallback:
               </p>
               <CommandCard command={rootKeyRepairCommand} runLocation="local" />
               <p className="text-xs text-muted-foreground">

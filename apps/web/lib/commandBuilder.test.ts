@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildRootKeyRepairCommand,
+  buildUserKeyRepairCommand,
   buildCommands,
   buildHandoffRunbook,
   buildInstallCommand,
@@ -61,6 +62,48 @@ describe("buildRootKeyRepairCommand", () => {
     expect(command).toContain("ssh root@203.0.113.42");
     expect(command).toContain("/home/ubuntu/.ssh/authorized_keys");
     expect(command).not.toContain("/root/.ssh/authorized_keys");
+  });
+});
+
+describe("buildUserKeyRepairCommand", () => {
+  test("copies the ACFS public key through the configured user without root", () => {
+    const command = buildUserKeyRepairCommand("dev-user", "203.0.113.42");
+
+    expect(command).toContain("cat ~/.ssh/acfs_ed25519.pub | ssh dev-user@203.0.113.42");
+    expect(command).toContain("read -r acfs_pubkey");
+    expect(command).toContain("test ! -L ~/.ssh");
+    expect(command).toContain("install -d -m 700 ~/.ssh");
+    expect(command).toContain("tail -c 1 ~/.ssh/authorized_keys");
+    expect(command).toContain('if ! grep -qxF \\"\\$acfs_pubkey\\" ~/.ssh/authorized_keys; then');
+    expect(command).toContain('printf \'%s\\n\' \\"\\$acfs_pubkey\\" >> ~/.ssh/authorized_keys');
+    expect(command).not.toContain("ssh root@");
+    expect(command).not.toContain("sudo");
+    expect(command).not.toContain("cat >> ~/.ssh/authorized_keys");
+  });
+
+  test("preserves public key quoting after local shell parsing", () => {
+    const command = buildUserKeyRepairCommand("ubuntu", "203.0.113.42");
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-lc", `ssh() { printf '%s\\n' "$2"; }\n${command}`],
+      env: { ...process.env, HOME: "/tmp/acfs-missing-home-for-test" },
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+
+    expect(result.exitCode).toBe(0);
+
+    const remoteCommand = new TextDecoder().decode(result.stdout);
+    expect(remoteCommand).toContain('grep -qxF "$acfs_pubkey" ~/.ssh/authorized_keys');
+    expect(remoteCommand).toContain('printf \'%s\\n\' "$acfs_pubkey" >> ~/.ssh/authorized_keys');
+    expect(remoteCommand).not.toContain("grep -qxF $acfs_pubkey");
+    expect(remoteCommand).not.toContain("printf '%s\\n' $acfs_pubkey");
+  });
+
+  test("falls back to ubuntu for usernames the installer would reject", () => {
+    const command = buildUserKeyRepairCommand("Bad User", "2001:db8::42");
+
+    expect(command).toContain("ssh ubuntu@[2001:db8::42]");
+    expect(command).not.toContain("Bad User");
   });
 });
 
@@ -236,6 +279,12 @@ describe("buildHandoffRunbook", () => {
     expect(runbook.install.command).toContain('TARGET_USER="dev-user"');
     expect(runbook.install.command).toContain('--ref "v1.2.3"');
     expect(runbook.install.command).toContain("/v1.2.3/install.sh");
+    expect(runbook.recoveryCommands[0]).toMatchObject({
+      id: "repair-user-ssh-key",
+      runLocation: "local",
+    });
+    expect(runbook.recoveryCommands[0]?.command).toContain("ssh dev-user@<ipv4-target-host>");
+    expect(runbook.recoveryCommands[0]?.command).not.toContain("ssh root@");
     expect(runbook.targetHost.kind).toBe("ipv4");
     expect(runbook.targetHost.value).toBe("<ipv4-target-host>");
     expect(runbook.privacy.rawTargetHostIncluded).toBe(false);

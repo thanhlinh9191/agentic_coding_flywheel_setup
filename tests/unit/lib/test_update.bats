@@ -12700,6 +12700,12 @@ EOF
 }
 
 @test "install.sh: password-only root summary includes macOS key repair" {
+    run grep -F 'target_user_ssh_repair_command="cat ~/.ssh/acfs_ed25519.pub | ssh ${TARGET_USER}@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'This uses the $TARGET_USER account and does not ask for the VPS root password.' "$PROJECT_ROOT/install.sh"
+    assert_success
+
     run grep -F 'ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER}@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
     assert_success
 
@@ -12769,6 +12775,12 @@ EOF
 }
 
 @test "user.sh: SSH fallback guidance uses idempotent key commands" {
+    run grep -F 'cat ~/.ssh/acfs_ed25519.pub | ssh ${target}@YOUR_SERVER_IP' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'If that cannot connect, use the root fallback:' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
     run grep -F 'tail -c 1 ${target_home}/.ssh/authorized_keys' "$PROJECT_ROOT/scripts/lib/user.sh"
     assert_success
 

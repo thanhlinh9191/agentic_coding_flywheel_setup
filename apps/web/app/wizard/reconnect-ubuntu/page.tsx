@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CommandCard } from "@/components/command-card";
 import { AlertCard, OutputPreview } from "@/components/alert-card";
-import { buildRootKeyRepairCommand, formatSshTarget } from "@/lib/commandBuilder";
+import { buildRootKeyRepairCommand, buildUserKeyRepairCommand, formatSshTarget } from "@/lib/commandBuilder";
 import { markStepComplete } from "@/lib/wizardSteps";
 import { useSSHUsername, useVPSIP } from "@/lib/userPreferences";
 import { withCurrentSearch } from "@/lib/utils";
@@ -70,6 +70,7 @@ export default function ReconnectUbuntuPage() {
   const userPrompt = `${effectiveUsername}@`;
   const sshCommand = `ssh -i ~/.ssh/acfs_ed25519 ${userTarget}`;
   const sshCommandWindows = `ssh -i $HOME\\.ssh\\acfs_ed25519 ${userTarget}`;
+  const userKeyRepairCommand = buildUserKeyRepairCommand(effectiveUsername, vpsIP);
   const rootKeyRepairCommand = buildRootKeyRepairCommand(effectiveUsername, vpsIP);
 
   return (
@@ -176,7 +177,14 @@ export default function ReconnectUbuntuPage() {
                 </li>
               </ol>
               <p className="mt-3 font-medium text-foreground">
-                If you&apos;re being asked for a password, copy your key into {effectiveUsername} from your local terminal:
+                If you can still sign in as {effectiveUsername}, copy your key into that account first:
+              </p>
+              <CommandCard command={userKeyRepairCommand} runLocation="local" className="mt-2" />
+              <p className="mt-2 text-xs text-muted-foreground">
+                This uses the {effectiveUsername} account and does not ask for the VPS root password.
+              </p>
+              <p className="mt-3 font-medium text-foreground">
+                If that cannot connect, use the root fallback:
               </p>
               <CommandCard command={rootKeyRepairCommand} runLocation="local" className="mt-2" />
               <p className="mt-2 text-xs text-muted-foreground">

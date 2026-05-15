@@ -409,6 +409,26 @@ export function buildRootKeyRepairCommand(username: string, host: string): strin
   ].join(" ");
 }
 
+export function buildUserKeyRepairCommand(username: string, host: string): string {
+  const safeUsername = normalizeSSHUsername(username) ?? "ubuntu";
+  const userTarget = formatSshTarget(safeUsername, host);
+  const sshDir = "~/.ssh";
+  const authorizedKeys = `${sshDir}/authorized_keys`;
+
+  return [
+    `cat ~/.ssh/acfs_ed25519.pub | ssh ${userTarget}`,
+    `"read -r acfs_pubkey`,
+    `&& test ! -L ${sshDir}`,
+    `&& install -d -m 700 ${sshDir}`,
+    `&& chmod 700 ${sshDir}`,
+    `&& test ! -L ${authorizedKeys}`,
+    `&& touch ${authorizedKeys}`,
+    `&& chmod 600 ${authorizedKeys}`,
+    `&& { [ ! -s ${authorizedKeys} ] || tail -c 1 ${authorizedKeys} | od -An -t u1 | grep -qw 10 || printf '\\n' >> ${authorizedKeys}; }`,
+    `&& if ! grep -qxF \\"\\$acfs_pubkey\\" ${authorizedKeys}; then printf '%s\\n' \\"\\$acfs_pubkey\\" >> ${authorizedKeys}; fi"`,
+  ].join(" ");
+}
+
 function normalizeInstallUsername(username: string | null | undefined): string | null {
   const normalized = normalizeSSHUsername(username);
   if (!normalized || normalized === "ubuntu") return null;
@@ -1336,6 +1356,7 @@ export function buildHandoffRunbook(inputs: CommandBuilderInputs): HandoffRunboo
   const rootLoginCommand = `ssh root@${redactedHost}`;
   const postInstallLoginCommand = `ssh -i ${SSH_KEY_PATH_UNIX} ${targetUsername}@${redactedHost}`;
   const postInstallLoginCommandWindows = `ssh -i ${SSH_KEY_PATH_WINDOWS} ${targetUsername}@${redactedHost}`;
+  const userKeyRepairCommand = buildUserKeyRepairCommand(targetUsername, redactedHost);
 
   return {
     schema: HANDOFF_RUNBOOK_SCHEMA,
@@ -1381,6 +1402,12 @@ export function buildHandoffRunbook(inputs: CommandBuilderInputs): HandoffRunboo
       mode: inputs.mode,
     },
     recoveryCommands: [
+      {
+        id: "repair-user-ssh-key",
+        label: "Copy the ACFS public key into the configured user",
+        command: userKeyRepairCommand,
+        runLocation: "local",
+      },
       {
         id: "reconnect-root",
         label: "Reconnect to the root SSH session",
