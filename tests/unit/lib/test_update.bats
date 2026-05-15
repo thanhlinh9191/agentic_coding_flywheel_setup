@@ -4859,6 +4859,27 @@ EOF
     done
 }
 
+@test "global wrappers use noninteractive sudo for cross-user re-exec" {
+    local update_wrapper="$PROJECT_ROOT/scripts/acfs-update"
+    local global_wrapper="$PROJECT_ROOT/scripts/acfs-global"
+
+    run grep -F 'exec "$sudo_bin" -n -u "$user" -H "${cmd_with_env[@]}"' "$update_wrapper"
+    assert_success
+    run grep -F 'if ! "$sudo_bin" -n -u "$user" -H "$true_bin" 2>/dev/null; then' "$update_wrapper"
+    assert_success
+    run grep -F 'passwordless sudo is required to run acfs-update as' "$update_wrapper"
+    assert_success
+
+    run grep -F 'exec "$sudo_bin" -n -u "$user" -H "${cmd_with_env[@]}"' "$global_wrapper"
+    assert_success
+    run grep -F 'if ! "$sudo_bin" -n -u "$user" -H "$true_bin" 2>/dev/null; then' "$global_wrapper"
+    assert_success
+    run grep -F 'passwordless sudo is required to run acfs as' "$global_wrapper"
+    assert_success
+    run grep -F 'sudo -n -u <user> -H -- \"$0\" [args...]' "$global_wrapper"
+    assert_success
+}
+
 @test "ACFS home resolvers honor explicit TARGET_HOME over stale system state" {
     local current_home
     local target_home
