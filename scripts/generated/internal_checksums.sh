@@ -8,7 +8,7 @@
 # Used by check-manifest-drift.sh to detect unauthorized changes.
 
 declare -gA ACFS_INTERNAL_CHECKSUMS=(
-  [scripts/lib/security.sh]="92180dde5fc85914353617cbf4d6e1836c1d3ef22a9c719dfe19fef42ea5e8c7"
+  [scripts/lib/security.sh]="821ebff8aa1503c551d8ab527593a9124134659a2e1655b0fe0b1a99e42469fc"
   [scripts/lib/agents.sh]="66fac24c48c9ce7d17ae213ff2f8669a1902e77f01266f4eeaccdcef09e02856"
   [scripts/lib/update.sh]="7bcad29c1bf19308841c4f090361b405b3a7ae1ddc2b0783705686f45b9cfb86"
   [scripts/lib/doctor.sh]="f784629ae65d0a258d92d759b9dc785d66a68b6b439930c78bef79f038c476ea"
@@ -21,7 +21,7 @@ declare -gA ACFS_INTERNAL_CHECKSUMS=(
   [scripts/lib/session.sh]="d2d2b26109a6eb0fad6620c68fdc0bd5d1a75ae453a6c35112bd5665484c94f1"
   [scripts/lib/os_detect.sh]="5cc5c182d212d7ea76fd345f97e97d808aad5d7e8cb29736b03f88e2ad115889"
   [scripts/lib/errors.sh]="3ce3d904e6e9fb5648fec89ee25426bc261ecddd5c6a4ea20393331bb3661b5e"
-  [scripts/lib/user.sh]="03fb18f299da1f0e27a87ddd0e0ce47027a6597e11fbf07ee3c8c53edae7d501"
+  [scripts/lib/user.sh]="922460532c6ef8cf402dcb219a1524b0b1db5225d4138b72ef7c5fa4d496c0c4"
   [scripts/lib/tools.sh]="e2d48e800888b759245e66cc9d86d097d83bf10f6d3bd2fcd17ec4bddfec94e0"
   [scripts/lib/export-config.sh]="6280123436223b5708f506b0a18b83c64891f8ee55af93c5c513f7fb202b97e3"
   [scripts/acfs-global]="1b7b9d64efa06fd2a31e373b905223373ae71d7e875a34b5a29d1a5e0001148e"
