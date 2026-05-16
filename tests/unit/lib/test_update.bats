@@ -1411,6 +1411,8 @@ EOF
 }
 
 @test "update_stack skips upstream MCP Agent Mail setup and owns service readiness" {
+    local mode_file="$HOME/mcp-agent-mail-installer-mode"
+
     QUIET=true
     VERBOSE=false
     DRY_RUN=false
@@ -1434,6 +1436,7 @@ EOF
     update_target_home() { printf '%s\n' "$HOME"; }
     update_run_logged_passthrough() {
         printf '%s\n' "$*" > "$HOME/mcp-agent-mail-passthrough.args"
+        stat -c '%a' "${4:-}" > "$mode_file"
         return 0
     }
     update_source_stack_lib() { return 0; }
@@ -1451,6 +1454,7 @@ EOF
     run update_stack
     assert_success
     [[ "$(cat "$HOME/mcp-agent-mail-passthrough.args")" == "update_run_in_target_context AM_INSTALL_SKIP_MCP_SETUP=1 bash "* ]]
+    [[ "$(cat "$mode_file")" == "755" ]]
 }
 
 @test "update_stack runs CASS through target tmpdir wrapper" {
@@ -10795,6 +10799,30 @@ SECURITY
     run update_run_verified_installer_with_env "test_tool" "TEST-ENV=value" "--flag"
     assert_failure
     assert_output --partial "Invalid inline env assignment"
+}
+
+@test "update verified installer temp script is target-readable" {
+    local mode_file="$BATS_TEST_TMPDIR/verified-installer-mode"
+    declare -gA KNOWN_INSTALLERS=([test_tool]="https://example.test/install.sh")
+
+    update_require_security() { return 0; }
+    get_checksum() { printf '%s\n' "abc123"; }
+    verify_checksum() {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'exit 0'
+    }
+    update_run_in_target_context() {
+        stat -c '%a' "${3:-}" > "$mode_file"
+        [[ -r "${3:-}" ]]
+        return 0
+    }
+
+    run update_run_verified_installer_with_env "test_tool" "" "--flag"
+    assert_success
+
+    run cat "$mode_file"
+    assert_success
+    assert_output "755"
 }
 
 @test "update verified installer with target tmpdir prepares target-owned TMPDIR" {

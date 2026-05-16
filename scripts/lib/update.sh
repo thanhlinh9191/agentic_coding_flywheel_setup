@@ -3693,7 +3693,7 @@ update_run_verified_installer_with_env() {
         return "$verify_exit_code"
     fi
 
-    if ! chmod +x "$tmp_install"; then
+    if ! chmod 0755 "$tmp_install"; then
         rm -f "$tmp_install" 2>/dev/null || true
         return 1
     fi
@@ -5440,48 +5440,53 @@ update_stack() {
             log_item "fail" "MCP Agent Mail" "failed to create temp file for verified installer"
         else
             if verify_checksum "$url" "$expected_sha256" "$tool" > "$tmp_install"; then
-                chmod +x "$tmp_install"
-                log_item "run" "MCP Agent Mail"
-
-                # Use --dest and exact target dir just like the manifest
-                local target_user=""
-                local target_home=""
-                local target_context_error=""
-                target_user="$(update_target_user 2>/dev/null || true)"
-                if [[ -z "$target_user" ]]; then
-                    target_context_error="unable to resolve target user"
-                else
-                    target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
-                    if [[ -z "$target_home" || "$target_home" != /* || "$target_home" == "/" ]]; then
-                        target_context_error="unable to resolve target home for '$target_user'"
-                    fi
-                fi
-
-                if [[ -n "$target_context_error" ]]; then
+                if ! chmod 0755 "$tmp_install"; then
                     rm -f "$tmp_install" 2>/dev/null || true
                     tmp_install=""
-                    update_finish_cmd_fail "MCP Agent Mail" "$target_context_error"
-                elif update_run_logged_passthrough update_run_in_target_context "AM_INSTALL_SKIP_MCP_SETUP=1" bash "$tmp_install" --dest "$target_home/mcp_agent_mail" --yes; then
-                    if update_source_stack_lib; then
-                        ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_repair_agent_mail_cli_symlink >/dev/null 2>&1 || true
-                    fi
-                    if update_source_stack_lib && \
-                       ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_configure_agent_mail_service && \
-                       ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_wait_for_agent_mail_health; then
-                        if [[ "$QUIET" != "true" ]] && [[ "$VERBOSE" != "true" ]]; then
-                            printf "\033[1A\033[2K  ${GREEN}[ok]${NC} %s\n" "MCP Agent Mail"
-                        elif [[ "$QUIET" != "true" ]]; then
-                            printf "  ${GREEN}[ok]${NC} %s\n" "MCP Agent Mail"
-                        fi
-                        log_to_file "Success: MCP Agent Mail"
-                        ((SUCCESS_COUNT += 1))
+                    update_finish_cmd_fail "MCP Agent Mail" "failed to make verified installer executable"
+                else
+                    log_item "run" "MCP Agent Mail"
+
+                    # Use --dest and exact target dir just like the manifest
+                    local target_user=""
+                    local target_home=""
+                    local target_context_error=""
+                    target_user="$(update_target_user 2>/dev/null || true)"
+                    if [[ -z "$target_user" ]]; then
+                        target_context_error="unable to resolve target user"
                     else
+                        target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
+                        if [[ -z "$target_home" || "$target_home" != /* || "$target_home" == "/" ]]; then
+                            target_context_error="unable to resolve target home for '$target_user'"
+                        fi
+                    fi
+
+                    if [[ -n "$target_context_error" ]]; then
                         rm -f "$tmp_install" 2>/dev/null || true
                         tmp_install=""
-                        update_finish_cmd_fail "MCP Agent Mail" "service setup/readiness failed"
+                        update_finish_cmd_fail "MCP Agent Mail" "$target_context_error"
+                    elif update_run_logged_passthrough update_run_in_target_context "AM_INSTALL_SKIP_MCP_SETUP=1" bash "$tmp_install" --dest "$target_home/mcp_agent_mail" --yes; then
+                        if update_source_stack_lib; then
+                            ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_repair_agent_mail_cli_symlink >/dev/null 2>&1 || true
+                        fi
+                        if update_source_stack_lib && \
+                           ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_configure_agent_mail_service && \
+                           ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_wait_for_agent_mail_health; then
+                            if [[ "$QUIET" != "true" ]] && [[ "$VERBOSE" != "true" ]]; then
+                                printf "\033[1A\033[2K  ${GREEN}[ok]${NC} %s\n" "MCP Agent Mail"
+                            elif [[ "$QUIET" != "true" ]]; then
+                                printf "  ${GREEN}[ok]${NC} %s\n" "MCP Agent Mail"
+                            fi
+                            log_to_file "Success: MCP Agent Mail"
+                            ((SUCCESS_COUNT += 1))
+                        else
+                            rm -f "$tmp_install" 2>/dev/null || true
+                            tmp_install=""
+                            update_finish_cmd_fail "MCP Agent Mail" "service setup/readiness failed"
+                        fi
+                    else
+                        log_item "fail" "MCP Agent Mail" "installer failed"
                     fi
-                else
-                    log_item "fail" "MCP Agent Mail" "installer failed"
                 fi
 
                 [[ -n "$tmp_install" ]] && rm -f "$tmp_install" 2>/dev/null || true
