@@ -91,16 +91,18 @@ _agent_json_file_has_usable_jq_value() {
     local file_path="${1:-}"
     local jq_expr="${2:-}"
     local candidate=""
+    local jq_bin=""
 
     [[ -s "$file_path" ]] || return 1
     [[ -n "$jq_expr" ]] || return 1
-    command -v jq >/dev/null 2>&1 || return 1
+    jq_bin="$(_agent_system_binary_path jq 2>/dev/null || true)"
+    [[ -n "$jq_bin" ]] || return 1
 
     while IFS= read -r candidate; do
         if _agent_has_usable_secret "$candidate"; then
             return 0
         fi
-    done < <(jq -r "$jq_expr" "$file_path" 2>/dev/null || true)
+    done < <("$jq_bin" -r "$jq_expr" "$file_path" 2>/dev/null || true)
 
     return 1
 }
@@ -917,15 +919,31 @@ GEMINI_EOF"
     fi
 
     # Settings file exists - merge our settings if jq is available
-    if command -v jq &>/dev/null; then
+    local jq_bin=""
+    local jq_bin_q=""
+    jq_bin="$(_agent_system_binary_path jq 2>/dev/null || true)"
+    if [[ -n "$jq_bin" ]]; then
+        local mv_bin=""
+        local mv_bin_q=""
+        local rm_bin=""
+        local rm_bin_q=""
         local tmp_file="$settings_dir/.settings.tmp.$$"
         local tmp_file_q=""
         local needs_update=false
+        mv_bin="$(_agent_system_binary_path mv 2>/dev/null || true)"
+        rm_bin="$(_agent_system_binary_path rm 2>/dev/null || true)"
+        if [[ -z "$mv_bin" || -z "$rm_bin" ]]; then
+            log_detail "mv/rm not available; skipping Gemini settings merge"
+            return 0
+        fi
+        printf -v jq_bin_q '%q' "$jq_bin"
+        printf -v mv_bin_q '%q' "$mv_bin"
+        printf -v rm_bin_q '%q' "$rm_bin"
         printf -v tmp_file_q '%q' "$tmp_file"
 
         # Check if enableInteractiveShell is already set correctly
         local shell_value
-        shell_value=$(_agent_run_as_user "jq -r 'if .tools.shell | has(\"enableInteractiveShell\") then .tools.shell.enableInteractiveShell | tostring else \"unset\" end' $settings_file_q" 2>/dev/null || echo "error")
+        shell_value=$(_agent_run_as_user "$jq_bin_q -r 'if .tools.shell | has(\"enableInteractiveShell\") then .tools.shell.enableInteractiveShell | tostring else \"unset\" end' $settings_file_q" 2>/dev/null || echo "error")
 
         if [[ "$shell_value" != "false" ]]; then
             needs_update=true
@@ -933,7 +951,7 @@ GEMINI_EOF"
 
         # Check if selectedType is set to oauth-personal (fix gemini-api-key if found)
         local auth_value
-        auth_value=$(_agent_run_as_user "jq -r '.selectedType // \"unset\"' $settings_file_q" 2>/dev/null || echo "error")
+        auth_value=$(_agent_run_as_user "$jq_bin_q -r '.selectedType // \"unset\"' $settings_file_q" 2>/dev/null || echo "error")
 
         if [[ "$auth_value" == "gemini-api-key" ]]; then
             log_detail "Fixing Gemini auth from API key to OAuth..."
@@ -944,7 +962,7 @@ GEMINI_EOF"
 
         # Check if MCP Agent Mail server is configured (fixes #158)
         local mcp_value
-        mcp_value=$(_agent_run_as_user "jq -r '.mcpServers.\"mcp-agent-mail\".httpUrl // \"unset\"' $settings_file_q" 2>/dev/null || echo "error")
+        mcp_value=$(_agent_run_as_user "$jq_bin_q -r '.mcpServers.\"mcp-agent-mail\".httpUrl // \"unset\"' $settings_file_q" 2>/dev/null || echo "error")
         if [[ "$mcp_value" != "$am_mcp_url" ]]; then
             needs_update=true
         fi
@@ -952,10 +970,10 @@ GEMINI_EOF"
         if [[ "$needs_update" == "true" ]]; then
             log_detail "Configuring Gemini settings for tmux compatibility, OAuth, and MCP Agent Mail..."
             # Update shell settings, auth type, and MCP server config
-            if _agent_run_as_user "jq --arg http_url $am_mcp_url_q '.selectedType = \"oauth-personal\" | .tools = (.tools // {}) | .tools.shell = (.tools.shell // {}) | .tools.shell.enableInteractiveShell = false | .mcpServers = (.mcpServers // {}) | .mcpServers.\"mcp-agent-mail\" = {\"httpUrl\": \$http_url}' $settings_file_q > $tmp_file_q && mv $tmp_file_q $settings_file_q" 2>/dev/null; then
+            if _agent_run_as_user "$jq_bin_q --arg http_url $am_mcp_url_q '.selectedType = \"oauth-personal\" | .tools = (.tools // {}) | .tools.shell = (.tools.shell // {}) | .tools.shell.enableInteractiveShell = false | .mcpServers = (.mcpServers // {}) | .mcpServers.\"mcp-agent-mail\" = {\"httpUrl\": \$http_url}' $settings_file_q > $tmp_file_q && $mv_bin_q $tmp_file_q $settings_file_q" 2>/dev/null; then
                 log_detail "Gemini settings configured (OAuth + tmux + MCP Agent Mail)"
             else
-                _agent_run_as_user "rm -f $tmp_file_q" 2>/dev/null
+                _agent_run_as_user "$rm_bin_q -f $tmp_file_q" 2>/dev/null
                 log_warn "Could not update Gemini settings automatically"
             fi
         else
@@ -1115,7 +1133,7 @@ check_agent_auth() {
     # Claude: require a non-empty OAuth token, not just a config file.
     local claude_creds_file="$target_home/.claude/.credentials.json"
     local claude_configured=false
-    if command -v jq &>/dev/null; then
+    if _agent_system_binary_path jq >/dev/null 2>&1; then
         if _agent_json_file_has_usable_jq_value "$claude_creds_file" '.claudeAiOauth.accessToken // empty | strings'; then
             claude_configured=true
         fi
@@ -1133,7 +1151,7 @@ check_agent_auth() {
     local codex_home="${CODEX_HOME:-$target_home/.codex}"
     local codex_auth_file="$codex_home/auth.json"
     local codex_configured=false
-    if command -v jq &>/dev/null; then
+    if _agent_system_binary_path jq >/dev/null 2>&1; then
         if _agent_json_file_has_usable_jq_value "$codex_auth_file" '[.tokens.access_token, .access_token, .accessToken, .OPENAI_API_KEY] | .[]? | strings'; then
             codex_configured=true
         fi
@@ -1152,7 +1170,7 @@ check_agent_auth() {
     local gemini_oauth_file="$target_home/.gemini/oauth_creds.json"
     local gemini_configured=false
 
-    if command -v jq &>/dev/null; then
+    if _agent_system_binary_path jq >/dev/null 2>&1; then
         if _agent_json_file_has_usable_jq_value "$gemini_accounts_file" '.active // empty | strings'; then
             gemini_configured=true
         elif _agent_json_file_has_usable_jq_value "$gemini_oauth_file" '[.access_token, .refresh_token] | .[]? | strings'; then

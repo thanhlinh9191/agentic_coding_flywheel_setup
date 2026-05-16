@@ -8438,6 +8438,74 @@ EOF
     assert_output 'http://127.0.0.1:8765/mcp/'
 }
 
+@test "configure_gemini_settings ignores PATH-poisoned jq" {
+    source_lib "agents"
+
+    local system_jq=""
+    local candidate
+    for candidate in /usr/bin/jq /bin/jq /usr/local/bin/jq /usr/local/sbin/jq /usr/sbin/jq /sbin/jq; do
+        if [[ -x "$candidate" ]]; then
+            system_jq="$candidate"
+            break
+        fi
+    done
+    [[ -n "$system_jq" ]] || skip "system jq required for Gemini settings trust test"
+
+    local target_home="$BATS_TEST_TMPDIR/gemini-trust-home"
+    local settings_dir="$target_home/.gemini"
+    local settings_file="$settings_dir/settings.json"
+    local target_am="$target_home/mcp_agent_mail/am"
+    local fake_bin="$BATS_TEST_TMPDIR/gemini-fake-jq-bin"
+    local marker="$BATS_TEST_TMPDIR/gemini-fake-jq-used"
+    mkdir -p "$settings_dir" "$(dirname "$target_am")" "$fake_bin"
+
+    cat > "$target_am" <<'EOF'
+#!/usr/bin/env bash
+printf 'am 0.2.39\n'
+EOF
+    chmod +x "$target_am"
+
+    cat > "$settings_file" <<'EOF'
+{
+  "selectedType": "gemini-api-key",
+  "tools": {
+    "shell": {
+      "enableInteractiveShell": true
+    }
+  },
+  "mcpServers": {
+    "mcp-agent-mail": {
+      "httpUrl": "http://127.0.0.1:8765/api/"
+    }
+  }
+}
+EOF
+
+    cat > "$fake_bin/jq" <<EOF
+#!/usr/bin/env bash
+: > "$marker"
+exit 1
+EOF
+    cat > "$fake_bin/mv" <<EOF
+#!/usr/bin/env bash
+: > "$marker"
+exit 1
+EOF
+    chmod +x "$fake_bin/jq" "$fake_bin/mv"
+
+    _agent_run_as_user() {
+        PATH="$fake_bin:/usr/bin:/bin" bash -c "$1"
+    }
+
+    run _configure_gemini_settings "$target_home"
+    assert_success
+    [[ ! -e "$marker" ]] || fail "configure_gemini_settings used a PATH-poisoned helper"
+
+    run "$system_jq" -r '.selectedType' "$settings_file"
+    assert_success
+    assert_output 'oauth-personal'
+}
+
 @test "install and update deploy all acfs doctor-dispatched runtime scripts" {
     local installer="$PROJECT_ROOT/install.sh"
     local update="$PROJECT_ROOT/scripts/lib/update.sh"
@@ -10514,12 +10582,60 @@ JSON
     # shellcheck disable=SC1090
     eval "$(sed -n '/^_agent_has_usable_secret()/,/^}$/p' "$agents_lib")"
     # shellcheck disable=SC1090
+    eval "$(sed -n '/^_agent_system_binary_path()/,/^}$/p' "$agents_lib")"
+    # shellcheck disable=SC1090
+    eval "$(sed -n '/^_agent_json_file_has_usable_jq_value()/,/^}$/p' "$agents_lib")"
+    # shellcheck disable=SC1090
     eval "$(sed -n '/^_agent_json_file_has_usable_string_key()/,/^}$/p' "$agents_lib")"
 
     run _agent_has_usable_secret "your_openai_api_key"
     assert_failure
+    if _agent_system_binary_path jq >/dev/null 2>&1; then
+        run _agent_json_file_has_usable_jq_value "$auth_file" '[.token] | .[]? | strings'
+        assert_success
+    fi
     run _agent_json_file_has_usable_string_key "$auth_file" "token"
     assert_success
+}
+
+@test "agents JSON auth parser ignores PATH-poisoned jq" {
+    local agents_lib="$PROJECT_ROOT/scripts/lib/agents.sh"
+    local auth_file="$BATS_TEST_TMPDIR/agents-auth.json"
+    local fake_bin="$BATS_TEST_TMPDIR/fake-agents-jq-bin"
+    local marker="$BATS_TEST_TMPDIR/fake-agents-jq-used"
+    local system_jq=""
+    local candidate
+
+    for candidate in /usr/bin/jq /bin/jq /usr/local/bin/jq /usr/local/sbin/jq /usr/sbin/jq /sbin/jq; do
+        if [[ -x "$candidate" ]]; then
+            system_jq="$candidate"
+            break
+        fi
+    done
+    [[ -n "$system_jq" ]] || skip "system jq required for agents auth parser trust test"
+
+    cat > "$auth_file" <<'JSON'
+{
+  "token": "your-token-here"
+}
+JSON
+    mkdir -p "$fake_bin"
+    cat > "$fake_bin/jq" <<EOF
+#!/usr/bin/env bash
+: > "$marker"
+printf '%s\n' 'real-token-from-fake-jq'
+EOF
+    chmod +x "$fake_bin/jq"
+
+    run env PATH="$fake_bin:/usr/bin:/bin" bash -s -- "$agents_lib" "$auth_file" <<'EOF_AUTH_PARSER_TRUSTED_JQ'
+set -euo pipefail
+agents_lib="$1"
+auth_file="$2"
+source "$agents_lib"
+! _agent_json_file_has_usable_jq_value "$auth_file" '[.token] | .[]? | strings'
+EOF_AUTH_PARSER_TRUSTED_JQ
+    assert_success
+    [[ ! -e "$marker" ]] || fail "agents auth parser used PATH-poisoned jq"
 }
 
 @test "doctor.sh cloud auth checks scan fallback files after placeholders" {
