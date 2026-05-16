@@ -1194,20 +1194,20 @@ run_as_root_shell() {
             return 1
         }
         if [[ -n "$cmd" ]]; then
-            "$sudo_bin" "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; eval \"\$1\"" _ "$cmd"
+            "$sudo_bin" -n "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; eval \"\$1\"" _ "$cmd"
             return $?
         fi
-        "$sudo_bin" "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; (printf \"%s\\n\" \"set -euo pipefail\"; cat) | \"\$ACFS_BASH_BIN\" -s"
+        "$sudo_bin" -n "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; (printf \"%s\\n\" \"set -euo pipefail\"; cat) | \"\$ACFS_BASH_BIN\" -s"
         return $?
     fi
 
     sudo_bin="$(_acfs_system_binary_path sudo 2>/dev/null || true)"
     if [[ -n "$sudo_bin" ]]; then
         if [[ -n "$cmd" ]]; then
-            "$sudo_bin" "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; eval \"\$1\"" _ "$cmd"
+            "$sudo_bin" -n "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; eval \"\$1\"" _ "$cmd"
             return $?
         fi
-        "$sudo_bin" "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; (printf \"%s\\n\" \"set -euo pipefail\"; cat) | \"\$ACFS_BASH_BIN\" -s"
+        "$sudo_bin" -n "${env_cmd[@]}" "$bash_bin" -c "$path_export_source; set -euo pipefail; (printf \"%s\\n\" \"set -euo pipefail\"; cat) | \"\$ACFS_BASH_BIN\" -s"
         return $?
     fi
 
