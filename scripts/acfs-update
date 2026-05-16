@@ -145,6 +145,7 @@ read_state_string() {
   jq_bin="$(system_binary_path jq 2>/dev/null || true)"
   if [[ -n "$jq_bin" ]]; then
     value="$("$jq_bin" -r --arg key "$key" '.[$key] // empty' "$state_file" 2>/dev/null || true)"
+    value="${value%%$'\n'*}"
   else
     sed_bin="$(system_binary_path sed 2>/dev/null || true)"
     if [[ -n "$sed_bin" ]]; then

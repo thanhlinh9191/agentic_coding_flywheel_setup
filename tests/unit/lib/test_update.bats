@@ -4847,6 +4847,49 @@ EOF
     assert_output "$target_home/.local/bin/acfs"
 }
 
+@test "global wrappers clamp multiline state strings from jq" {
+    local label
+    local wrapper
+    local state_file
+    local target_home
+    local jq_candidate=""
+
+    for jq_candidate in /usr/bin/jq /bin/jq /usr/local/bin/jq; do
+        [[ -x "$jq_candidate" ]] && break
+        jq_candidate=""
+    done
+    [[ -n "$jq_candidate" ]] || skip "system jq required"
+
+    target_home="$(create_temp_dir)"
+    state_file="$BATS_TEST_TMPDIR/global-wrapper-multiline-state.json"
+    mkdir -p "$target_home/.local/bin"
+    cat > "$state_file" <<EOF
+{"target_home":"$target_home\n/tmp/poisoned-home","bin_dir":"$target_home/.local/bin\n/tmp/poisoned-bin"}
+EOF
+
+    while IFS='|' read -r label wrapper; do
+        run bash -s -- "$wrapper" "$state_file" "$target_home" <<'EOF_WRAPPER_MULTILINE_STATE'
+script="$1"
+state_file="$2"
+target_home="$3"
+
+eval "$(sed -n '/^sanitize_abs_nonroot_path()/,/^}$/p' "$script")"
+eval "$(sed -n '/^system_binary_path()/,/^}$/p' "$script")"
+eval "$(sed -n '/^read_state_string()/,/^}$/p' "$script")"
+eval "$(sed -n '/^read_target_home_from_state_file()/,/^}$/p' "$script")"
+eval "$(sed -n '/^read_bin_dir_from_state_file()/,/^}$/p' "$script")"
+
+set -euo pipefail
+[[ "$(read_target_home_from_state_file "$state_file")" == "$target_home" ]]
+[[ "$(read_bin_dir_from_state_file "$state_file")" == "$target_home/.local/bin" ]]
+EOF_WRAPPER_MULTILINE_STATE
+        assert_success "$label wrapper leaked a multiline state value"
+    done <<EOF
+acfs-update|$PROJECT_ROOT/scripts/acfs-update
+acfs-global|$PROJECT_ROOT/scripts/acfs-global
+EOF
+}
+
 @test "acfs-update wrapper only promotes system state homes with an update script" {
     local update_wrapper="$PROJECT_ROOT/scripts/acfs-update"
     local stale_home
