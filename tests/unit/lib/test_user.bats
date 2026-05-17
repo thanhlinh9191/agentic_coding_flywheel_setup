@@ -433,18 +433,60 @@ EOF
 }
 
 @test "prompt_ssh_key: --yes skips missing root keys without prompting" {
+    command -v setsid >/dev/null || skip "setsid is required to detach /dev/tty"
+
     export ACFS_TEST_MODE=1
     export ACFS_TEST_ROOT_AUTHORIZED_KEYS="$BATS_TEST_TMPDIR/missing_authorized_keys"
     export YES_MODE=true
 
-    run prompt_ssh_key
+    run env PROJECT_ROOT="$PROJECT_ROOT" BATS_TEST_TMPDIR="$BATS_TEST_TMPDIR" setsid bash -c '
+        export ACFS_TEST_MODE=1
+        export ACFS_TEST_ROOT_AUTHORIZED_KEYS="$BATS_TEST_TMPDIR/missing_authorized_keys"
+        export TARGET_USER=testuser
+        export YES_MODE=true
+        source "$PROJECT_ROOT/scripts/lib/logging.sh"
+        source "$PROJECT_ROOT/scripts/lib/user.sh"
+        prompt_ssh_key </dev/null
+    '
     assert_success
     assert_output --partial "No SSH public key found for root"
     assert_output --partial "skipping SSH key prompt in --yes mode"
 }
 
+@test "prompt_ssh_key: --yes prompts for missing root key when a tty is available" {
+    command -v script >/dev/null || skip "script is required to allocate a tty"
+
+    local root_keys="$BATS_TEST_TMPDIR/root_authorized_keys"
+    local runner="$BATS_TEST_TMPDIR/prompt_key_runner.sh"
+    local pubkey="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey acfs"
+
+    cat > "$runner" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export ACFS_TEST_MODE=1
+export ACFS_TEST_ROOT_AUTHORIZED_KEYS="$ROOT_KEYS"
+export TARGET_USER=testuser
+export YES_MODE=true
+source "$PROJECT_ROOT/scripts/lib/logging.sh"
+source "$PROJECT_ROOT/scripts/lib/user.sh"
+prompt_ssh_key
+printf 'stored=%s\n' "$(cat "$ROOT_KEYS")"
+EOF
+    chmod +x "$runner"
+
+    run env PROJECT_ROOT="$PROJECT_ROOT" ROOT_KEYS="$root_keys" RUNNER="$runner" PUBKEY="$pubkey" bash -c \
+        'printf "%s\n" "$PUBKEY" | script -qfec "$RUNNER" /dev/null'
+
+    assert_success
+    assert_output --partial "prompting for one even in --yes mode"
+    assert_output --partial "SSH key installed successfully"
+    assert_output --partial "stored=$pubkey"
+}
+
 @test "prompt_ssh_key: --yes missing root keys sets final SSH warning" {
-    run env PROJECT_ROOT="$PROJECT_ROOT" BATS_TEST_TMPDIR="$BATS_TEST_TMPDIR" bash -c '
+    command -v setsid >/dev/null || skip "setsid is required to detach /dev/tty"
+
+    run env PROJECT_ROOT="$PROJECT_ROOT" BATS_TEST_TMPDIR="$BATS_TEST_TMPDIR" setsid bash -c '
         set -euo pipefail
         source "$PROJECT_ROOT/scripts/lib/logging.sh"
         source "$PROJECT_ROOT/scripts/lib/user.sh"

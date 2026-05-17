@@ -627,14 +627,8 @@ prompt_ssh_key() {
         fi
     fi
 
-    if [[ "${YES_MODE:-false}" == "true" ]]; then
-        if [[ "$has_existing_key" == "true" ]]; then
-            log_detail "SSH keys already present; keeping existing keys (--yes mode)"
-        else
-            log_warn "No SSH public key found for root; skipping SSH key prompt in --yes mode"
-            log_detail "After install, add your key with: ssh-copy-id ${TARGET_USER:-ubuntu}@<ip>"
-            export ACFS_SSH_KEY_WARNING="true"
-        fi
+    if [[ "${YES_MODE:-false}" == "true" && "$has_existing_key" == "true" ]]; then
+        log_detail "SSH keys already present; keeping existing keys (--yes mode)"
         return 0
     fi
 
@@ -648,6 +642,16 @@ prompt_ssh_key() {
         else
             prompt_fd=""
         fi
+    fi
+
+    if [[ "${YES_MODE:-false}" == "true" ]]; then
+        if [[ -z "$prompt_fd" ]]; then
+            log_warn "No SSH public key found for root; skipping SSH key prompt in --yes mode"
+            log_detail "After install, add your key with: ssh-copy-id ${TARGET_USER:-ubuntu}@<ip>"
+            export ACFS_SSH_KEY_WARNING="true"
+            return 0
+        fi
+        log_warn "No SSH public key found for root; prompting for one even in --yes mode"
     fi
 
     if [[ -z "$prompt_fd" ]]; then
