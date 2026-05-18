@@ -280,7 +280,8 @@ EOF
     assert_success
     refute_output --partial "unbound variable"
     assert_output --partial "No SSH keys found to migrate to testuser user"
-    assert_output --partial "If that cannot connect, use the root fallback:"
+    assert_output --partial "passwordless sudo is not a login password"
+    assert_output --partial "use the root fallback:"
 }
 
 @test "user_home_for_user: rejects invalid fallback usernames" {
@@ -544,7 +545,7 @@ EOF
     '
     assert_success
     assert_output --partial "Non-interactive mode detected"
-    assert_output --partial "ssh-copy-id testuser@<ip>"
+    assert_output --partial "final summary's root fallback"
     assert_output --partial "warning=true"
 }
 

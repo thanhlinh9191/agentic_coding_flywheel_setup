@@ -7812,13 +7812,19 @@ Tip: use --print to see upstream install scripts that will be fetched."
         ssh_key_warning_section="SSH key setup required for $TARGET_USER:
 
   You connected with a password, so no SSH key was copied to $TARGET_USER.
-  From your local machine, first try this if you can still sign in as $TARGET_USER:
+  Passwordless sudo for $TARGET_USER is not a login password.
+
+  From your local machine, first try this only if you can already sign in as $TARGET_USER:
      $target_user_ssh_repair_command
 
-  If that cannot connect, use the root fallback:
+  This uses the $TARGET_USER account and does not ask for the VPS root password.
+
+  If you only have the VPS root password or that cannot connect, use the root fallback:
      $target_ssh_repair_command
 
-  If you already know the $TARGET_USER password and have ssh-copy-id, this also works:
+  This asks for the VPS root password once, then installs your local key for $TARGET_USER.
+
+  ssh-copy-id is optional and only works if you know the $TARGET_USER Linux account password:
      $target_ssh_copy_command
 
 "
@@ -7915,20 +7921,22 @@ $summary_content"
                 echo -e "  to the $TARGET_USER user. You won't be able to SSH as $TARGET_USER"
                 echo -e "  until you set up SSH key access."
                 echo ""
-                echo -e "  ${YELLOW}FROM YOUR LOCAL MACHINE, first try this if you can still sign in as $TARGET_USER:${NC}"
+                echo -e "  ${GRAY}Passwordless sudo for $TARGET_USER is not a login password.${NC}"
+                echo ""
+                echo -e "  ${YELLOW}FROM YOUR LOCAL MACHINE, first try this only if you can already sign in as $TARGET_USER:${NC}"
                 echo ""
                 echo -e "    ${BLUE}$target_user_ssh_repair_command${NC}"
                 echo ""
                 echo -e "  ${GRAY}This uses the $TARGET_USER account and does not ask for the VPS root password.${NC}"
                 echo ""
-                echo -e "  ${YELLOW}If that cannot connect, use the root fallback:${NC}"
+                echo -e "  ${YELLOW}If you only have the VPS root password or that cannot connect, use the root fallback:${NC}"
                 echo ""
                 echo -e "    ${BLUE}$target_ssh_repair_command${NC}"
                 echo ""
-                echo -e "  This asks for the root password once, then installs your local"
+                echo -e "  This asks for the VPS root password once, then installs your local"
                 echo -e "  ACFS public key for $TARGET_USER."
                 echo ""
-                echo -e "  ${YELLOW}If you already know the $TARGET_USER password and have ssh-copy-id:${NC}"
+                echo -e "  ${YELLOW}ssh-copy-id is optional and only works if you know the $TARGET_USER Linux account password:${NC}"
                 echo ""
                 echo -e "    ${BLUE}$target_ssh_copy_command${NC}"
                 echo -e "${RED}════════════════════════════════════════════════════════════${NC}"

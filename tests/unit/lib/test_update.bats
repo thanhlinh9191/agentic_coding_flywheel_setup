@@ -13741,6 +13741,18 @@ EOF
     run grep -F 'This uses the $TARGET_USER account and does not ask for the VPS root password.' "$PROJECT_ROOT/install.sh"
     assert_success
 
+    run grep -F 'Passwordless sudo for $TARGET_USER is not a login password.' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'If you only have the VPS root password or that cannot connect, use the root fallback:' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'This asks for the VPS root password once, then installs your local' "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F 'ssh-copy-id is optional and only works if you know the $TARGET_USER Linux account password:' "$PROJECT_ROOT/install.sh"
+    assert_success
+
     run grep -F 'ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER}@YOUR_SERVER_IP' "$PROJECT_ROOT/install.sh"
     assert_success
 
@@ -13829,6 +13841,18 @@ EOF
     assert_success
 
     run grep -F 'If that cannot connect, use the root fallback:' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_failure
+
+    run grep -F 'If you only have the VPS root password or that cannot connect,' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'passwordless sudo is not a login password.' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'The root fallback asks for the VPS root password once.' "$PROJECT_ROOT/scripts/lib/user.sh"
+    assert_success
+
+    run grep -F 'ssh-copy-id is optional and only works if you know the ${target}' "$PROJECT_ROOT/scripts/lib/user.sh"
     assert_success
 
     run grep -F "printf -v target_ssh_dir_q '%q' \"\$target_ssh_dir\"" "$PROJECT_ROOT/scripts/lib/user.sh"

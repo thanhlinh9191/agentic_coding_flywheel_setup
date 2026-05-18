@@ -413,16 +413,22 @@ migrate_ssh_keys() {
             echo "  You connected with a password, so no SSH key was migrated."
             echo "  After installation, you'll need to set up SSH access."
             echo ""
-            echo "  EASIEST FIX - from your LOCAL machine, first try this if"
-            echo "  you can still sign in as $target:"
+            echo "  EASIEST FIX - from your LOCAL machine, first try this only if"
+            echo "  you can already sign in as $target:"
             echo ""
             echo "    $target_user_repair_command"
             echo ""
-            echo "  If that cannot connect, use the root fallback:"
+            echo "  This uses the $target account; passwordless sudo is not a login password."
+            echo ""
+            echo "  If you only have the VPS root password or that cannot connect,"
+            echo "  use the root fallback:"
             echo ""
             echo "    $root_repair_command"
             echo ""
-            echo "  If you know the ${target} password and have ssh-copy-id, this can also work:"
+            echo "  The root fallback asks for the VPS root password once."
+            echo ""
+            echo "  ssh-copy-id is optional and only works if you know the ${target}"
+            echo "  Linux account password:"
             echo ""
             echo "    ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${target}@YOUR_SERVER_IP"
             echo ""
@@ -648,7 +654,7 @@ prompt_ssh_key() {
     if [[ "${YES_MODE:-false}" == "true" ]]; then
         if [[ -z "$prompt_fd" ]]; then
             log_warn "No SSH public key found for root; skipping SSH key prompt in --yes mode"
-            log_detail "After install, add your key with: ssh-copy-id ${TARGET_USER:-ubuntu}@<ip>"
+            log_detail "After install, use the final summary's root fallback if you only have the VPS root password"
             export ACFS_SSH_KEY_WARNING="true"
             return 0
         fi
@@ -661,7 +667,7 @@ prompt_ssh_key() {
             return 0
         fi
         log_warn "Non-interactive mode detected (no TTY), skipping SSH key prompt"
-        log_detail "After install, add your key with: ssh-copy-id ${TARGET_USER:-ubuntu}@<ip>"
+        log_detail "After install, use the final summary's root fallback if you only have the VPS root password"
         export ACFS_SSH_KEY_WARNING="true"
         return 0
     fi
@@ -715,7 +721,7 @@ prompt_ssh_key() {
         else
             log_warn "SSH key setup skipped"
             log_detail "From your local machine, you can add your key later by running:"
-            log_detail "  ssh-copy-id -i ~/.ssh/acfs_ed25519.pub ${TARGET_USER:-ubuntu}@<ip>"
+            log_detail "  Use the final summary's root fallback if you only have the VPS root password"
             export ACFS_SSH_KEY_WARNING="true"
         fi
         return 0
