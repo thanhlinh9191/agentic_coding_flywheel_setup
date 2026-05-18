@@ -2550,6 +2550,8 @@ EOF
 test_fix_ssh_server_records_change_when_enabling_service() {
     setup_test_env
     local created_systemd_dir=false
+    local original_resolver=""
+    local temp_bin=""
 
     if [[ ! -d /run/systemd/system ]]; then
         mkdir -p /run/systemd/system || {
@@ -2567,17 +2569,35 @@ test_fix_ssh_server_records_change_when_enabling_service() {
         return 1
     }
 
-    sshd() { return 0; }
-    sudo() { "$@"; }
-    systemctl() {
+    original_resolver="$(declare -f doctor_fix_system_binary_path)"
+    temp_bin="$ACFS_STATE_DIR/bin"
+    mkdir -p "$temp_bin"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$temp_bin/sshd"
+    cat > "$temp_bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+    is-active) exit 1 ;;
+    enable) exit 0 ;;
+    *) exit 0 ;;
+esac
+EOF
+    cat > "$temp_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "-n" ]] || exit 42
+shift
+exec "$@"
+EOF
+    chmod +x "$temp_bin/sshd" "$temp_bin/systemctl" "$temp_bin/sudo"
+
+    doctor_fix_system_binary_path() {
         case "${1:-}" in
-            is-active) return 1 ;;
-            enable) return 0 ;;
-            *) return 0 ;;
+            sshd|systemctl|sudo) printf '%s\n' "$temp_bin/${1:-}" ;;
+            *) command -v -- "${1:-}" 2>/dev/null || return 1 ;;
         esac
     }
 
     if ! fix_ssh_server "network.ssh_server" >/dev/null 2>&1; then
+        eval "$original_resolver"
         echo "  fix_ssh_server should succeed when systemctl enable/start succeeds"
         if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
         cleanup_test_env
@@ -2585,12 +2605,14 @@ test_fix_ssh_server_records_change_when_enabling_service() {
     fi
 
     if ! jq -e 'select(.description == "Enabled and started SSH server")' "$ACFS_CHANGES_FILE" >/dev/null 2>&1; then
+        eval "$original_resolver"
         echo "  fix_ssh_server did not record the SSH enable/start change"
         if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
         cleanup_test_env
         return 1
     fi
 
+    eval "$original_resolver"
     if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
     cleanup_test_env
     return 0
@@ -2599,6 +2621,8 @@ test_fix_ssh_server_records_change_when_enabling_service() {
 test_fix_ssh_server_fails_when_service_enable_fails() {
     setup_test_env
     local created_systemd_dir=false
+    local original_resolver=""
+    local temp_bin=""
 
     if [[ ! -d /run/systemd/system ]]; then
         mkdir -p /run/systemd/system || {
@@ -2616,17 +2640,35 @@ test_fix_ssh_server_fails_when_service_enable_fails() {
         return 1
     }
 
-    sshd() { return 0; }
-    sudo() { "$@"; }
-    systemctl() {
+    original_resolver="$(declare -f doctor_fix_system_binary_path)"
+    temp_bin="$ACFS_STATE_DIR/bin"
+    mkdir -p "$temp_bin"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$temp_bin/sshd"
+    cat > "$temp_bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+    is-active) exit 1 ;;
+    enable) exit 1 ;;
+    *) exit 1 ;;
+esac
+EOF
+    cat > "$temp_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "-n" ]] || exit 42
+shift
+exec "$@"
+EOF
+    chmod +x "$temp_bin/sshd" "$temp_bin/systemctl" "$temp_bin/sudo"
+
+    doctor_fix_system_binary_path() {
         case "${1:-}" in
-            is-active) return 1 ;;
-            enable) return 1 ;;
-            *) return 1 ;;
+            sshd|systemctl|sudo) printf '%s\n' "$temp_bin/${1:-}" ;;
+            *) command -v -- "${1:-}" 2>/dev/null || return 1 ;;
         esac
     }
 
     if fix_ssh_server "network.ssh_server" >/dev/null 2>&1; then
+        eval "$original_resolver"
         echo "  fix_ssh_server should fail when systemctl enable/start fails"
         if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
         cleanup_test_env
@@ -2634,12 +2676,14 @@ test_fix_ssh_server_fails_when_service_enable_fails() {
     fi
 
     if [[ -s "$ACFS_CHANGES_FILE" ]]; then
+        eval "$original_resolver"
         echo "  fix_ssh_server should not record a change when enable/start fails"
         if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
         cleanup_test_env
         return 1
     fi
 
+    eval "$original_resolver"
     if [[ "$created_systemd_dir" == "true" ]]; then rmdir /run/systemd/system 2>/dev/null || true; fi
     cleanup_test_env
     return 0
@@ -2647,6 +2691,8 @@ test_fix_ssh_server_fails_when_service_enable_fails() {
 
 test_fix_ssh_keepalive_applies_and_records_change() {
     setup_test_env
+    local original_resolver=""
+    local temp_bin=""
 
     export DOCTOR_FIX_SSHD_CONFIG="$ACFS_STATE_DIR/sshd_config"
     printf 'Port 22\n' > "$DOCTOR_FIX_SSHD_CONFIG"
@@ -2657,33 +2703,58 @@ test_fix_ssh_keepalive_applies_and_records_change() {
         return 1
     }
 
-    sudo() { "$@"; }
-    systemctl() { return 0; }
+    original_resolver="$(declare -f doctor_fix_system_binary_path)"
+    temp_bin="$ACFS_STATE_DIR/bin"
+    mkdir -p "$temp_bin"
+    cat > "$temp_bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    cat > "$temp_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "-n" ]] || exit 42
+shift
+exec "$@"
+EOF
+    chmod +x "$temp_bin/systemctl" "$temp_bin/sudo"
+
+    doctor_fix_system_binary_path() {
+        case "${1:-}" in
+            systemctl|sudo) printf '%s\n' "$temp_bin/${1:-}" ;;
+            *) command -v -- "${1:-}" 2>/dev/null || return 1 ;;
+        esac
+    }
 
     if ! fix_ssh_keepalive "network.ssh_keepalive" >/dev/null 2>&1; then
+        eval "$original_resolver"
         echo "  fix_ssh_keepalive should succeed against an override sshd_config path"
         cleanup_test_env
         return 1
     fi
 
     if ! grep -q 'ClientAliveInterval 60' "$DOCTOR_FIX_SSHD_CONFIG"; then
+        eval "$original_resolver"
         echo "  fix_ssh_keepalive did not append ClientAliveInterval"
         cleanup_test_env
         return 1
     fi
 
     if ! jq -e --arg path "$DOCTOR_FIX_SSHD_CONFIG" 'select(.description == ("Configured SSH keepalive in " + $path))' "$ACFS_CHANGES_FILE" >/dev/null 2>&1; then
+        eval "$original_resolver"
         echo "  fix_ssh_keepalive did not record the keepalive change"
         cleanup_test_env
         return 1
     fi
 
+    eval "$original_resolver"
     cleanup_test_env
     return 0
 }
 
 test_fix_ssh_keepalive_restores_file_when_backup_and_record_change_fail() {
     setup_test_env
+    local original_resolver=""
+    local temp_bin=""
 
     export DOCTOR_FIX_SSHD_CONFIG="$ACFS_STATE_DIR/sshd_config"
     printf 'Port 22\n' > "$DOCTOR_FIX_SSHD_CONFIG"
@@ -2702,10 +2773,30 @@ test_fix_ssh_keepalive_restores_file_when_backup_and_record_change_fail() {
 
     create_backup() { return 1; }
     record_change() { return 1; }
-    sudo() { "$@"; }
-    systemctl() { return 0; }
+    original_resolver="$(declare -f doctor_fix_system_binary_path)"
+    temp_bin="$ACFS_STATE_DIR/bin"
+    mkdir -p "$temp_bin"
+    cat > "$temp_bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    cat > "$temp_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == "-n" ]] || exit 42
+shift
+exec "$@"
+EOF
+    chmod +x "$temp_bin/systemctl" "$temp_bin/sudo"
+
+    doctor_fix_system_binary_path() {
+        case "${1:-}" in
+            systemctl|sudo) printf '%s\n' "$temp_bin/${1:-}" ;;
+            *) command -v -- "${1:-}" 2>/dev/null || return 1 ;;
+        esac
+    }
 
     if fix_ssh_keepalive "network.ssh_keepalive" >/dev/null 2>&1; then
+        eval "$original_resolver"
         eval "$original_create_backup"
         eval "$original_record_change"
         echo "  fix_ssh_keepalive unexpectedly succeeded when backup and journaling failed"
@@ -2714,6 +2805,7 @@ test_fix_ssh_keepalive_restores_file_when_backup_and_record_change_fail() {
         return 1
     fi
 
+    eval "$original_resolver"
     eval "$original_create_backup"
     eval "$original_record_change"
 

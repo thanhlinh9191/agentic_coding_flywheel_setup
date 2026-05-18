@@ -103,6 +103,42 @@ doctor_fix_system_binary_path() {
     return 1
 }
 
+doctor_fix_root_prefix() {
+    local ref_name="${1:-}"
+
+    [[ -n "$ref_name" ]] || return 1
+
+    local -n _root_prefix_ref="$ref_name"
+    _root_prefix_ref=()
+
+    if [[ $EUID -eq 0 ]]; then
+        return 0
+    fi
+
+    local sudo_bin=""
+    sudo_bin="$(doctor_fix_system_binary_path sudo 2>/dev/null || true)"
+    [[ -n "$sudo_bin" ]] || return 1
+    _root_prefix_ref=("$sudo_bin" -n)
+}
+
+doctor_fix_root_display_prefix() {
+    local sudo_bin=""
+    local display_prefix=""
+
+    if [[ $EUID -eq 0 ]]; then
+        printf '%s' ""
+        return 0
+    fi
+
+    sudo_bin="$(doctor_fix_system_binary_path sudo 2>/dev/null || true)"
+    if [[ -n "$sudo_bin" ]]; then
+        printf -v display_prefix '%q -n ' "$sudo_bin"
+    else
+        display_prefix="sudo -n "
+    fi
+    printf '%s' "$display_prefix"
+}
+
 doctor_fix_getent_passwd_entry() {
     local user="${1-}"
     local getent_bin=""
@@ -753,6 +789,18 @@ doctor_fix_files_json() {
     autofix_files_json "$@"
 }
 
+doctor_fix_backups_json_array() {
+    local backup_json="${1:-[]}"
+    local jq_bin=""
+
+    jq_bin="$(doctor_fix_system_binary_path jq 2>/dev/null || true)"
+    if [[ -n "$jq_bin" ]]; then
+        printf '%s\n' "${backup_json:-[]}" | "$jq_bin" -c 'if type == "object" then [.] else . end' 2>/dev/null && return 0
+    fi
+
+    printf '[]\n'
+}
+
 doctor_fix_require_security() {
     if [[ "${DOCTOR_FIX_SECURITY_READY:-false}" == "true" ]]; then
         return 0
@@ -1076,7 +1124,7 @@ fix_path_ordering() {
         false \
         "path" "Added PATH ordering to $target_file" \
         "${restore_command:-if [[ -f '$target_file' ]]; then sed -i '/$marker/,+1d' '$target_file'; fi}" \
-        false "info" "$(doctor_fix_files_json "$target_file")" "$(echo "${backup_json:-[]}" | jq -c 'if type == \"object\" then [.] else . end' 2>/dev/null || echo '[]')" "[]"; then
+        false "info" "$(doctor_fix_files_json "$target_file")" "$(doctor_fix_backups_json_array "${backup_json:-[]}")" "[]"; then
         FIX_FAILED=$((FIX_FAILED + 1))
         return 1
     fi
@@ -1166,6 +1214,7 @@ fix_config_copy() {
 dcg_hook_already_installed() {
     local doctor_json=""
     local dcg_bin=""
+    local jq_bin=""
     local runtime_home=""
     local runtime_path=""
 
@@ -1177,8 +1226,9 @@ dcg_hook_already_installed() {
     doctor_json="$(env HOME="$runtime_home" PATH="$runtime_path" "$dcg_bin" doctor --format json 2>/dev/null)" || return 1
     [[ -n "$doctor_json" ]] || return 1
 
-    if command -v jq &>/dev/null; then
-        printf '%s' "$doctor_json" | jq -e '
+    jq_bin="$(doctor_fix_system_binary_path jq 2>/dev/null || true)"
+    if [[ -n "$jq_bin" ]]; then
+        printf '%s' "$doctor_json" | "$jq_bin" -e '
             (.hook_installed == true) or
             any(.checks[]?; .id == "hook_wiring" and .status == "ok")
         ' >/dev/null 2>&1
@@ -1454,7 +1504,7 @@ fix_acfs_sourcing() {
         false \
         "config" "Added ACFS sourcing to .zshrc" \
         "${restore_command:-if [[ -f '$zshrc' ]]; then sed -i '/$marker/,+1d' '$zshrc'; fi}" \
-        false "info" "$(doctor_fix_files_json "$zshrc")" "$(echo "${backup_json:-[]}" | jq -c 'if type == \"object\" then [.] else . end' 2>/dev/null || echo '[]')" "[]"; then
+        false "info" "$(doctor_fix_files_json "$zshrc")" "$(doctor_fix_backups_json_array "${backup_json:-[]}")" "[]"; then
         FIX_FAILED=$((FIX_FAILED + 1))
         return 1
     fi
@@ -1839,31 +1889,44 @@ fix_verified_install() {
 # Install and enable SSH server
 fix_ssh_server() {
     local check_id="$1"
-    local sudo_cmd=""
-    [[ $EUID -ne 0 ]] && command -v sudo &>/dev/null && sudo_cmd="sudo"
+    local apt_get_bin=""
+    local root_display=""
+    local sshd_bin=""
+    local systemctl_bin=""
+    local -a root_cmd=()
+
+    root_display="$(doctor_fix_root_display_prefix)"
+    sshd_bin="$(doctor_fix_system_binary_path sshd 2>/dev/null || true)"
+    systemctl_bin="$(doctor_fix_system_binary_path systemctl 2>/dev/null || true)"
 
     # Guard: Check if already installed
-    if command -v sshd &>/dev/null || [[ -f /etc/ssh/sshd_config ]]; then
+    if [[ -n "$sshd_bin" ]] || [[ -f /etc/ssh/sshd_config ]]; then
         # Check if running
-        if command -v systemctl &>/dev/null && [[ -d /run/systemd/system ]]; then
-            if systemctl is-active --quiet ssh 2>/dev/null || systemctl is-active --quiet sshd 2>/dev/null; then
+        if [[ -n "$systemctl_bin" && -d /run/systemd/system ]]; then
+            if "$systemctl_bin" is-active --quiet ssh 2>/dev/null || "$systemctl_bin" is-active --quiet sshd 2>/dev/null; then
                 doctor_fix_log INFO "SSH server already installed and running"
                 return 0
             fi
 
             # Installed but not running - enable and start
             if [[ "$DOCTOR_FIX_DRY_RUN" == "true" ]]; then
-                FIXES_DRY_RUN+=("fix.ssh.server|Enable and start SSH server|/etc/ssh/sshd_config|$sudo_cmd systemctl enable --now ssh")
+                FIXES_DRY_RUN+=("fix.ssh.server|Enable and start SSH server|/etc/ssh/sshd_config|${root_display}systemctl enable --now ssh")
                 doctor_fix_log DRY "Enable and start SSH server"
                 return 0
             fi
 
-            if $sudo_cmd systemctl enable --now ssh 2>/dev/null || $sudo_cmd systemctl enable --now sshd 2>/dev/null; then
+            if ! doctor_fix_root_prefix root_cmd; then
+                doctor_fix_log ERROR "Cannot start SSH server without root or passwordless sudo"
+                FIX_FAILED=$((FIX_FAILED + 1))
+                return 1
+            fi
+
+            if "${root_cmd[@]}" "$systemctl_bin" enable --now ssh 2>/dev/null || "${root_cmd[@]}" "$systemctl_bin" enable --now sshd 2>/dev/null; then
                 if ! doctor_fix_record_change_or_rollback \
-                    "$sudo_cmd systemctl disable --now ssh 2>/dev/null || $sudo_cmd systemctl disable --now sshd 2>/dev/null || true" \
+                    "$(printf '%q disable --now ssh 2>/dev/null || %q disable --now sshd 2>/dev/null || true' "$systemctl_bin" "$systemctl_bin")" \
                     true \
                     "service" "Enabled and started SSH server" \
-                    "$sudo_cmd systemctl disable --now ssh 2>/dev/null || $sudo_cmd systemctl disable --now sshd 2>/dev/null || true" \
+                    "$(printf '%q disable --now ssh 2>/dev/null || %q disable --now sshd 2>/dev/null || true' "$systemctl_bin" "$systemctl_bin")" \
                     true "info" "[\"/etc/ssh/sshd_config\"]" "[]" "[]"; then
                     FIX_FAILED=$((FIX_FAILED + 1))
                     return 1
@@ -1884,13 +1947,30 @@ fix_ssh_server() {
 
     # Not installed - install it
     if [[ "$DOCTOR_FIX_DRY_RUN" == "true" ]]; then
-        FIXES_DRY_RUN+=("fix.ssh.server|Install openssh-server|/etc/ssh/sshd_config|$sudo_cmd apt-get install -y openssh-server")
+        FIXES_DRY_RUN+=("fix.ssh.server|Install openssh-server|/etc/ssh/sshd_config|${root_display}apt-get install -y openssh-server")
         doctor_fix_log DRY "Install openssh-server"
         return 0
     fi
 
-    if $sudo_cmd apt-get install -y openssh-server 2>/dev/null; then
-        if ! ($sudo_cmd systemctl enable --now ssh 2>/dev/null || $sudo_cmd systemctl enable --now sshd 2>/dev/null); then
+    apt_get_bin="$(doctor_fix_system_binary_path apt-get 2>/dev/null || true)"
+    if [[ -z "$apt_get_bin" ]]; then
+        doctor_fix_log ERROR "apt-get not found; cannot install openssh-server"
+        FIX_FAILED=$((FIX_FAILED + 1))
+        return 1
+    fi
+    if [[ -z "$systemctl_bin" ]]; then
+        doctor_fix_log ERROR "systemctl not found; cannot enable SSH server"
+        FIX_FAILED=$((FIX_FAILED + 1))
+        return 1
+    fi
+    if ! doctor_fix_root_prefix root_cmd; then
+        doctor_fix_log ERROR "Cannot install openssh-server without root or passwordless sudo"
+        FIX_FAILED=$((FIX_FAILED + 1))
+        return 1
+    fi
+
+    if "${root_cmd[@]}" env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 "$apt_get_bin" install -y openssh-server 2>/dev/null; then
+        if ! ("${root_cmd[@]}" "$systemctl_bin" enable --now ssh 2>/dev/null || "${root_cmd[@]}" "$systemctl_bin" enable --now sshd 2>/dev/null); then
             doctor_fix_log ERROR "Installed openssh-server but failed to enable/start SSH service"
             FIX_FAILED=$((FIX_FAILED + 1))
             return 1
@@ -1927,14 +2007,19 @@ fix_ssh_keepalive() {
     local sshd_config="${DOCTOR_FIX_SSHD_CONFIG:-/etc/ssh/sshd_config}"
     local marker="# ACFS: SSH keepalive settings (added by doctor --fix)"
     local fallback_restore_command=""
+    local root_display=""
+    local systemctl_bin=""
+    local tee_bin=""
+    local -a root_cmd=()
 
-    local sudo_cmd=""
-    [[ $EUID -ne 0 ]] && command -v sudo &>/dev/null && sudo_cmd="sudo"
+    root_display="$(doctor_fix_root_display_prefix)"
+    systemctl_bin="$(doctor_fix_system_binary_path systemctl 2>/dev/null || true)"
+    tee_bin="$(doctor_fix_system_binary_path tee 2>/dev/null || true)"
 
     # Guard: sshd_config must exist
     if [[ ! -f "$sshd_config" ]]; then
         doctor_fix_log WARN "sshd_config not found, install openssh-server first"
-        FIXES_MANUAL+=("$check_id|Install openssh-server first|$sudo_cmd apt-get install -y openssh-server")
+        FIXES_MANUAL+=("$check_id|Install openssh-server first|${root_display}apt-get install -y openssh-server")
         FIX_MANUAL=$((FIX_MANUAL + 1))
         return 1
     fi
@@ -1946,9 +2031,20 @@ fix_ssh_keepalive() {
     fi
 
     if [[ "$DOCTOR_FIX_DRY_RUN" == "true" ]]; then
-        FIXES_DRY_RUN+=("fix.ssh.keepalive|Configure SSH keepalive|$sshd_config|echo 'ClientAliveInterval 60' >> $sshd_config")
+        FIXES_DRY_RUN+=("fix.ssh.keepalive|Configure SSH keepalive|$sshd_config|${root_display}tee -a $sshd_config")
         doctor_fix_log DRY "Configure SSH keepalive in $sshd_config"
         return 0
+    fi
+
+    if [[ -z "$tee_bin" ]]; then
+        doctor_fix_log ERROR "tee not found; cannot append SSH keepalive settings"
+        FIX_FAILED=$((FIX_FAILED + 1))
+        return 1
+    fi
+    if ! doctor_fix_root_prefix root_cmd; then
+        doctor_fix_log ERROR "Cannot configure SSH keepalive without root or passwordless sudo"
+        FIX_FAILED=$((FIX_FAILED + 1))
+        return 1
     fi
 
     # Create backup
@@ -1968,21 +2064,30 @@ fix_ssh_keepalive() {
         echo "$marker"
         echo "ClientAliveInterval 60"
         echo "ClientAliveCountMax 3"
-    } | $sudo_cmd tee -a "$sshd_config" > /dev/null; then
+    } | "${root_cmd[@]}" "$tee_bin" -a "$sshd_config" > /dev/null; then
         doctor_fix_log ERROR "Failed to append SSH keepalive settings to $sshd_config"
         FIX_FAILED=$((FIX_FAILED + 1))
         return 1
     fi
 
     # Restart sshd to apply
-    $sudo_cmd systemctl reload ssh 2>/dev/null || $sudo_cmd systemctl reload sshd 2>/dev/null || true
+    if [[ -n "$systemctl_bin" ]]; then
+        "${root_cmd[@]}" "$systemctl_bin" reload ssh 2>/dev/null || "${root_cmd[@]}" "$systemctl_bin" reload sshd 2>/dev/null || true
+    fi
+
+    local reload_rollback=""
+    if [[ -n "$systemctl_bin" ]]; then
+        reload_rollback="$(printf '%q reload ssh 2>/dev/null || %q reload sshd 2>/dev/null || true' "$systemctl_bin" "$systemctl_bin")"
+    else
+        reload_rollback="true"
+    fi
 
     if ! doctor_fix_record_change_or_rollback \
-        "${restore_command:-$fallback_restore_command}; $sudo_cmd systemctl reload ssh 2>/dev/null || $sudo_cmd systemctl reload sshd 2>/dev/null || true" \
+        "${restore_command:-$fallback_restore_command}; $reload_rollback" \
         true \
         "config" "Configured SSH keepalive in $sshd_config" \
-        "${restore_command:-$fallback_restore_command}; $sudo_cmd systemctl reload ssh 2>/dev/null || $sudo_cmd systemctl reload sshd 2>/dev/null || true" \
-        true "info" "$(doctor_fix_files_json "$sshd_config")" "$(echo "${backup_json:-[]}" | jq -c 'if type == \"object\" then [.] else . end' 2>/dev/null || echo '[]')" "[]"; then
+        "${restore_command:-$fallback_restore_command}; $reload_rollback" \
+        true "info" "$(doctor_fix_files_json "$sshd_config")" "$(doctor_fix_backups_json_array "${backup_json:-[]}")" "[]"; then
         FIX_FAILED=$((FIX_FAILED + 1))
         return 1
     fi
@@ -2108,6 +2213,8 @@ doctor_fix_agent_mail_mcp_path() {
 agent_mail_fix_doctor_healthy() {
     local doctor_json=""
     local am_bin=""
+    local jq_bin=""
+    local timeout_bin=""
     local -a cmd=()
 
     am_bin="$(doctor_fix_agent_mail_bin 2>/dev/null || true)"
@@ -2118,16 +2225,18 @@ agent_mail_fix_doctor_healthy() {
         cmd+=("$1")
     fi
 
-    if command -v timeout &>/dev/null; then
-        doctor_json="$(timeout 15s "${cmd[@]}" 2>/dev/null)" || return 1
+    timeout_bin="$(doctor_fix_system_binary_path timeout 2>/dev/null || true)"
+    if [[ -n "$timeout_bin" ]]; then
+        doctor_json="$("$timeout_bin" 15s "${cmd[@]}" 2>/dev/null)" || return 1
     else
         doctor_json="$("${cmd[@]}" 2>/dev/null)" || return 1
     fi
 
     [[ -n "$doctor_json" ]] || return 1
 
-    if command -v jq &>/dev/null; then
-        [[ "$(printf '%s' "$doctor_json" | jq -r '.healthy // false' 2>/dev/null)" == "true" ]]
+    jq_bin="$(doctor_fix_system_binary_path jq 2>/dev/null || true)"
+    if [[ -n "$jq_bin" ]]; then
+        [[ "$(printf '%s' "$doctor_json" | "$jq_bin" -r '.healthy // false' 2>/dev/null)" == "true" ]]
         return $?
     fi
 
