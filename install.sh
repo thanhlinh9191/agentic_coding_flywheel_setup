@@ -6469,7 +6469,7 @@ NTM_CONFIG_EOF
             systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1
         fi
         agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1
-        readiness_body="$(agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null)"
+        readiness_body="$(agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null)"
         printf "%s\n" "$readiness_body" | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\""
         '; then
             log_success "MCP Agent Mail service already running on http://127.0.0.1:8765"
@@ -6715,7 +6715,7 @@ UNIT_EOF
                         else
                             existing_pid=""
                             if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                               agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\""; then
+                               agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\""; then
                                 :
                             elif [[ -f "$fallback_pid_file" ]]; then
                                 existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
@@ -6761,7 +6761,7 @@ UNIT_EOF
                             log_error "MCP Agent Mail installed but curl is unavailable for local health checks"
                         else
                             until "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                                  "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; do
+                                  "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; do
                                 if [[ "$am_waited" -ge "$am_max_wait" ]]; then
                                     log_error "MCP Agent Mail service did not become ready on http://127.0.0.1:8765 after ${am_max_wait}s"
                                     break
@@ -6770,7 +6770,7 @@ UNIT_EOF
                                 am_waited=$((am_waited + 2))
                             done
                             if "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                               "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                               "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
                                 log_success "MCP Agent Mail service running on http://127.0.0.1:8765"
                                 am_service_ready=true
                             else
