@@ -6036,7 +6036,7 @@ install_supabase_cli_release() {
 
     local version="${tag#v}"
     local base_url="https://github.com/supabase/cli/releases/download/${tag}"
-    local tarball="supabase_linux_${arch}.tar.gz"
+    local tarball="supabase_${version}_linux_${arch}.tar.gz"
     # Supabase CLI v2.99.0 (2026-05-18) renamed the per-version asset to plain
     # `checksums.txt`. Older releases still ship `supabase_${version}_checksums.txt`.
     # Try the new name first, then fall back to the legacy one so both work. (#282)
