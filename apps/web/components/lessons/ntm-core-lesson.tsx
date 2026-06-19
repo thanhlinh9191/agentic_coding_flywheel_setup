@@ -96,7 +96,7 @@ export function NtmCoreLesson() {
           <CommandSection
             title="Create a Project Session"
             icon={<LayoutGrid className="h-4 w-4" />}
-            code="ntm spawn myproject --cc=2 --cod=1 --gmi=1"
+            code="ntm spawn myproject --cc=2 --cod=1 --agy=1"
             description="Creates a tmux session with multiple agent panes."
           >
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -192,7 +192,7 @@ ntm send myproject --cod "Focus on the frontend"`}
         <Paragraph>For a typical project:</Paragraph>
 
         <div className="mt-6">
-          <CodeBlock code="ntm spawn myproject --cc=2 --cod=1 --gmi=1" />
+          <CodeBlock code="ntm spawn myproject --cc=2 --cod=1 --agy=1" />
         </div>
 
         <div className="mt-6">
@@ -351,7 +351,7 @@ const AGENTS: AgentPaneV2[] = [
 const TOTAL_STEPS = 8;
 
 const STEP_COMMANDS: Record<number, string> = {
-  0: "ntm spawn myproject --cc=2 --cod=1 --gmi=1",
+  0: "ntm spawn myproject --cc=2 --cod=1 --agy=1",
   1: "Spawning Claude-1 (claude-sonnet-4-6)...",
   2: "Spawning Claude-2 (claude-sonnet-4-6)...",
   3: "Spawning Codex (codex-mini)...",

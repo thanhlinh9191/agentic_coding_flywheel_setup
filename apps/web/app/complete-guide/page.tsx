@@ -740,7 +740,7 @@ bv --robot-triage --robot-triage-by-label    # Group by domain`} />
             <P>You can create sessions using Claude Code, Codex, and Gemini-CLI in different panes in tmux, or use the <a href="https://github.com/Dicklesworthstone/ntm" target="_blank" rel="noopener noreferrer" className="text-[#FF5500] hover:text-[#FFBD2E] underline underline-offset-4 decoration-[#FF5500]/30 hover:decoration-[#FFBD2E]/50 transition-colors">ntm project</a> (Named Tmux Manager) as the command center:</P>
 
             <CodeBlock language="bash" code={`# Spawn a multi-agent session
-ntm spawn myproject --cc=2 --cod=1 --gmi=1
+ntm spawn myproject --cc=2 --cod=1 --agy=1
 
 # Send a prompt to ALL agents
 ntm send myproject "Your marching orders prompt here"
@@ -818,7 +818,7 @@ When you're not sure what to do next, use the bv tool mentioned in AGENTS.md to 
                 ]}
               />
 
-              <P>Efficiency definitely declines as N grows, but if you have enough tasks in beads and they have Agent Mail and you don&apos;t start them all at the exact same time, you go faster as N grows. The practical limit is around 12 agents on a single project, sometimes higher. Or run 5 agents per project across multiple projects simultaneously. Why the ratio <code>--cc=2 --cod=1 --gmi=1</code>? Two Claude sessions because they are great for architecture and complex reasoning; one Codex for fast iteration and testing with complementary strengths; one Gemini for a different perspective, especially good for docs and review duty.</P>
+              <P>Efficiency definitely declines as N grows, but if you have enough tasks in beads and they have Agent Mail and you don&apos;t start them all at the exact same time, you go faster as N grows. The practical limit is around 12 agents on a single project, sometimes higher. Or run 5 agents per project across multiple projects simultaneously. Why the ratio <code>--cc=2 --cod=1 --agy=1</code>? Two Claude sessions because they are great for architecture and complex reasoning; one Codex for fast iteration and testing with complementary strengths; one Antigravity (agy, running Gemini 3.1 Pro) for a different perspective, especially good for docs and review duty.</P>
 
               <DataTable
                 headers={["Open Beads", "Claude (cc)", "Codex (cod)", "Gemini (gmi)"]}
@@ -1268,7 +1268,8 @@ And you can't do this sort of thing using regex or a script, you MUST manually r
 
               <CodeBlock language="bash" code={`alias cc='NODE_OPTIONS="--max-old-space-size=32768" claude --dangerously-skip-permissions'
 alias cod='codex --dangerously-bypass-approvals-and-sandbox'
-alias gmi='gemini --yolo'`} />
+agy() { command agy --model "Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$@"; }
+alias gmi='gemini --yolo'  # legacy: Gemini CLI retired 2026-06-18`} />
 
               <P>These are configured automatically by the installer. DCG provides the safety net that makes this viable.</P>
             </SubSection>
@@ -1632,7 +1633,7 @@ onboard
 acfs newproj my-first-project --interactive
 
 # 5. Spawn agents and start building
-ntm spawn my-first-project --cc=2 --cod=1 --gmi=1`} />
+ntm spawn my-first-project --cc=2 --cod=1 --agy=1`} />
 
               <P>You don&apos;t even need to know much at all about computers; you just need the desire to learn and some grit and determination. And about $500/month for the subscriptions, plus another $50 or so for the cloud server.</P>
 

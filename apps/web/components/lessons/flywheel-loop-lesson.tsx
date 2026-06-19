@@ -362,7 +362,7 @@ git push -u origin beads-sync
 br config set sync.branch=beads-sync
 
 # 4. Spawn your agents
-ntm spawn my-first-project --cc=2 --cod=1 --gmi=1
+ntm spawn my-first-project --cc=2 --cod=1 --agy=1
 
 # 5. Start building!
 ntm send my-first-project "Let's build something awesome.

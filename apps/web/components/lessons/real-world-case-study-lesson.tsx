@@ -447,7 +447,7 @@ Create at least 300 beads covering the full implementation."`}
         <div className="mt-8">
           <CodeBlock
             code={`# Launch the swarm with NTM
-ntm spawn cass-memory --cc=6 --cod=3 --gmi=2
+ntm spawn cass-memory --cc=6 --cod=3 --agy=2
 
 # Each agent runs this workflow:
 # 1. Check what's ready
@@ -697,7 +697,7 @@ cc "Read PLAN.md. Transform into 100+ beads with
 dependencies and priorities. Use br CLI."
 
 # 4. Launch the swarm
-ntm spawn myproject --cc=3 --cod=2 --gmi=1
+ntm spawn myproject --cc=3 --cod=2 --agy=1
 
 # 5. Monitor with bv
 bv --robot-triage  # See what's ready
@@ -1186,7 +1186,7 @@ const TIMELINE_EVENTS: TimelineEvent[] = [
     description: "Master plan loaded, beads initialized. 693 beads with 14 epics ready for assignment. NTM session spawned.",
     agentIds: [],
     files: ["PLAN_FOR_CASS_MEMORY_SYSTEM.md", ".beads/issues.jsonl"],
-    command: "ntm spawn cass-memory --cc=6 --cod=3 --gmi=2",
+    command: "ntm spawn cass-memory --cc=6 --cod=3 --agy=2",
     detail: "The 5,600-line hybrid plan from 4 competing AI proposals is loaded as the project source of truth. Beads are initialized with dependency chains so agents always know what is unblocked.",
   },
   {
@@ -1353,7 +1353,7 @@ const GANTT_DATA: GanttRow[] = [
 // -- Terminal Command Log Data ------------------------------------------------
 
 const TERMINAL_COMMANDS: { time: string; cmd: string; agent: string }[] = [
-  { time: "0:00", cmd: "ntm spawn cass-memory --cc=6 --cod=3 --gmi=2", agent: "operator" },
+  { time: "0:00", cmd: "ntm spawn cass-memory --cc=6 --cod=3 --agy=2", agent: "operator" },
   { time: "0:02", cmd: "bv --robot-triage", agent: "BlueLake" },
   { time: "0:03", cmd: "br update BEAD-001 --status in_progress", agent: "BlueLake" },
   { time: "0:04", cmd: "bv --robot-triage  # picking first unblocked bead", agent: "RedFox" },

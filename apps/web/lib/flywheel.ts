@@ -69,7 +69,7 @@ export const workflowScenarios: WorkflowScenario[] = [
     steps: [
       {
         tool: "ntm",
-        action: "Spawn agents across 3 projects: `ntm spawn proj1 --cc=2 proj2 --cod=1 proj3 --gmi=1`",
+        action: "Spawn agents across 3 projects: `ntm spawn proj1 --cc=2 proj2 --cod=1 proj3 --agy=1`",
         result: "6 agents running in parallel across your machines",
       },
       {
@@ -260,7 +260,7 @@ export const workflowScenarios: WorkflowScenario[] = [
       },
       {
         tool: "slb",
-        action: "Add more agents safely: `slb run 'ntm spawn proj3 --gmi=2'`",
+        action: "Add more agents safely: `slb run 'ntm spawn proj3 --agy=2'`",
         result: "Even with 6 agents, terminal stays responsive",
       },
     ],
@@ -476,7 +476,7 @@ const _flywheelTools: FlywheelTool[] = [
       "Hooks: pre/post-spawn, pre/post-send, pre/post-shutdown with env vars",
     ],
     cliCommands: [
-      "ntm spawn <session> --cc=N --cod=N --gmi=N",
+      "ntm spawn <session> --cc=N --cod=N --agy=N",
       "ntm send <session> --cc 'prompt'",
       "ntm --robot-status",
       "ntm --robot-snapshot",

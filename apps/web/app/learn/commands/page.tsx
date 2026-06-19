@@ -160,7 +160,7 @@ const COMMANDS: CommandEntry[] = [
     name: "ntm",
     fullName: "Named Tmux Manager",
     description: "Agent cockpit (spawn, send prompts, dashboards)",
-    example: "ntm spawn myproject --cc=2 --cod=1 --gmi=1",
+    example: "ntm spawn myproject --cc=2 --cod=1 --agy=1",
     category: "stack",
     learnMoreHref: "/learn/tools/ntm",
   },
