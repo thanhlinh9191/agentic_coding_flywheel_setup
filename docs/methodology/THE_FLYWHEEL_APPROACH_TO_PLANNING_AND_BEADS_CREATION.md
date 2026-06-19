@@ -319,6 +319,9 @@ The installer is idempotent (safe to re-run), checkpointed (resumes on failure),
 ```bash
 alias cc='NODE_OPTIONS="--max-old-space-size=32768" claude --dangerously-skip-permissions'
 alias cod='codex --dangerously-bypass-approvals-and-sandbox'
+# Antigravity CLI (successor to the retired Gemini CLI), model-pinned + auto-approve
+agy() { command agy --model "Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$@"; }
+# Gemini CLI — LEGACY (retired 2026-06-18; kept only to read old ~/.gemini/tmp history)
 alias gmi='gemini --yolo'
 ```
 
@@ -946,7 +949,7 @@ NTM (Named Tmux Manager) is the command center for orchestrating multiple agents
 
 ```bash
 # Spawn a multi-agent session
-ntm spawn myproject --cc=2 --cod=1 --gmi=1
+ntm spawn myproject --cc=2 --cod=1 --agy=1
 
 # This creates:
 # - A tmux session named "myproject"
@@ -1002,14 +1005,14 @@ Those guides also help explain why WezTerm is so convenient for this work. They 
 
 ### Typical Swarm Composition
 
-Why the ratio `--cc=2 --cod=1 --gmi=1`?
+Why the ratio `--cc=2 --cod=1 --agy=1`?
 - **2 Claude** -- Great for architecture and complex reasoning; the workhorse
 - **1 Codex** -- Fast iteration and testing; complementary strengths
-- **1 Gemini** -- Different perspective; good for docs and review duty
+- **1 Antigravity** -- Different perspective (Gemini 3.1 Pro); good for docs and review duty
 
 For larger projects, scale up proportionally. The skills codify a **weighted allocation formula** based on bead backlog:
 
-| Open Beads | Claude (cc) | Codex (cod) | Gemini (gmi) |
+| Open Beads | Claude (cc) | Codex (cod) | Antigravity (agy) |
 |-----------|-------------|-------------|--------------|
 | 400+ | 4 | 4 | 2 |
 | 100-399 | 3 | 3 | 2 |
@@ -1092,7 +1095,7 @@ For the same example project, a small first swarm might look like this:
 - **Claude agent A** claims `br-101` and implements upload + parse handling.
 - **Codex agent B** claims `br-102` and works on the search path plus tests.
 - **Claude agent C** claims `br-103` and builds the admin failure dashboard.
-- **Gemini agent D** stays flexible: reviews recent work, checks docs, and fills in test or UX gaps where needed.
+- **Antigravity agent D** stays flexible: reviews recent work, checks docs, and fills in test or UX gaps where needed.
 
 All four agents share the same codebase, read the same `AGENTS.md`, coordinate via Agent Mail, and use `bv` whenever they are uncertain about what unlocks the most progress next. That is what makes the swarm feel like one system rather than four unrelated terminals.
 
@@ -2445,7 +2448,7 @@ onboard
 acfs newproj my-first-project --interactive
 
 # 7. Spawn agents
-ntm spawn my-first-project --cc=2 --cod=1 --gmi=1
+ntm spawn my-first-project --cc=2 --cod=1 --agy=1
 
 # 8. Start building!
 ntm send my-first-project "Let's build something awesome."

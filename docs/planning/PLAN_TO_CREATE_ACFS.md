@@ -104,7 +104,7 @@ ACFS consists of **three products in one repo**:
 1. Linux navigation in 3 minutes
 2. SSH and persistence (why tmux matters)
 3. tmux basics (attach/detach/panes)
-4. Your agent commands (cc/cod/gmi + login)
+4. Your agent commands (cc/cod/agy + login)
 5. NTM as command center
 6. Show NTM command palette prompts
 7. The flywheel loop (the complete workflow)
@@ -182,7 +182,10 @@ ACFS consists of **three products in one repo**:
 # Coding agents (dangerously enabled for vibe mode)
 alias cc='NODE_OPTIONS="--max-old-space-size=32768" claude --dangerously-skip-permissions'
 alias cod='codex --dangerously-bypass-approvals-and-sandbox -m gpt-5.2-codex -c model_reasoning_effort="xhigh" -c model_reasoning_summary_format=experimental --enable web_search_request'
-alias gmi='gemini --yolo --model gemini-3-pro-preview'
+# Antigravity CLI (successor to the retired Gemini CLI), model-pinned + auto-approve
+agy() { command agy --model "Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$@"; }
+# Gemini CLI — LEGACY (retired 2026-06-18; kept only to read old ~/.gemini/tmp history)
+alias gmi='gemini --yolo'
 
 # Flywheel stack shortcuts
 alias am='cd ~/mcp_agent_mail && scripts/run_server_with_token.sh'
@@ -352,7 +355,7 @@ Agents
   PASS ✅ claude (available)
   PASS ✅ codex (available)
   PASS ✅ gemini (available)
-  PASS ✅ aliases: cc cod gmi
+  PASS ✅ aliases: cc cod agy
 
 Cloud/DB
   PASS ✅ vault (x.y.z)
@@ -405,7 +408,7 @@ Stable IDs for mapping to website checklist:
 - `shell.plugins.*`
 - `tool.bun`, `tool.uv`, `tool.cargo`, `tool.go`, `tool.tmux`, `tool.rg`, `tool.sg`
 - `agent.claude`, `agent.codex`, `agent.gemini`
-- `agent.alias.cc`, `agent.alias.cod`, `agent.alias.gmi`
+- `agent.alias.cc`, `agent.alias.cod`, `agent.alias.agy`
 - `cloud.vault`, `cloud.postgres18`, `cloud.wrangler`, `cloud.supabase`, `cloud.vercel`
 - `stack.ntm`, `stack.slb`, `stack.ubs`, `stack.bv`, `stack.cass`, `stack.cm`, `stack.caam`, `stack.mcp_agent_mail`
 
@@ -421,7 +424,7 @@ Stable IDs for mapping to website checklist:
   - Creates `ubuntu` user
   - Installs zsh + shell config via `~/.acfs`
   - Installs tmux + ntm
-  - Installs cc/cod/gmi dependencies
+  - Installs cc/cod/agy dependencies
   - Installs basic `onboard`
 
 **Acceptance:**
@@ -533,7 +536,7 @@ source "$HOME/.acfs/zsh/acfs.zshrc"
 
 After `onboard`, offer:
 ```bash
-ntm spawn myproject --cc=2 --cod=1 --gmi=1
+ntm spawn myproject --cc=2 --cod=1 --agy=1
 ```
 
 This makes the user feel: "I just became an agentic engineer."
