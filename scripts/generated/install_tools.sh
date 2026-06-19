@@ -1256,15 +1256,15 @@ install_utils_s2p() {
 
     # Verify
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: verify: s2p --help || s2p --version (target_user)"
+        log_info "dry-run: verify: s2p --help (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_UTILS_S2P'
-s2p --help || s2p --version
+s2p --help
 INSTALL_UTILS_S2P
         then
-            log_warn "utils.s2p: verify failed: s2p --help || s2p --version"
+            log_warn "utils.s2p: verify failed: s2p --help"
             if type -t record_skipped_tool >/dev/null 2>&1; then
-              record_skipped_tool "utils.s2p" "verify failed: s2p --help || s2p --version"
+              record_skipped_tool "utils.s2p" "verify failed: s2p --help"
             elif type -t state_tool_skip >/dev/null 2>&1; then
               state_tool_skip "utils.s2p"
             fi

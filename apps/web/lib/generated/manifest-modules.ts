@@ -32,7 +32,7 @@ export interface ManifestProvenanceMetadata {
 
 export const manifestProvenance = {
   acfsVersion: "0.7.0",
-  manifestSha256: "4f1825a13aa0cf7219d0813530ec82b5466f943e79db4378f910904f199d8968",
+  manifestSha256: "87d6c7762648da45c90b2bf7f8439a45b31b67d44905d09695d56165107b538c",
   checksumsYamlSha256: "7792ddb77df1ee910ac0233ffea2302afb8f217532766fa38014f5a16e720fad",
 } as const satisfies ManifestProvenanceMetadata;
 
@@ -926,7 +926,7 @@ export const manifestModules: ManifestModuleMetadata[] = [
     category: "tools",
     phase: 9,
     dependencies: [
-      "lang.rust",
+      "lang.bun",
     ],
     tags: [
       "utility",

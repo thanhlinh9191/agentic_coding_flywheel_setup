@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="4f1825a13aa0cf7219d0813530ec82b5466f943e79db4378f910904f199d8968"
+ACFS_MANIFEST_SHA256="87d6c7762648da45c90b2bf7f8439a45b31b67d44905d09695d56165107b538c"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -210,7 +210,7 @@ declare -gA ACFS_MODULE_DEPS=(
   ['utils.toon_rust']="lang.rust"
   ['utils.rano']="lang.rust"
   ['utils.mdwb']="lang.rust"
-  ['utils.s2p']="lang.rust"
+  ['utils.s2p']="lang.bun"
   ['utils.rust_proxy']="lang.rust"
   ['utils.aadc']="lang.rust"
   ['utils.caut']="lang.rust"

@@ -385,7 +385,7 @@ declare -a MANIFEST_CHECKS=(
     "utils.toon_rust	toon_rust (tru) - Token-optimized notation format for LLM context efficiency	tru --help || tru --version	optional	target_user"
     "utils.rano	rano - Network observer for AI CLIs with request/response logging	rano --help || rano --version	optional	target_user"
     "utils.mdwb	markdown_web_browser (mdwb) - Convert websites to Markdown for LLM consumption	mdwb --help || mdwb --version	optional	target_user"
-    "utils.s2p	source_to_prompt_tui (s2p) - Code to LLM prompt generator with TUI	s2p --help || s2p --version	optional	target_user"
+    "utils.s2p	source_to_prompt_tui (s2p) - Code to LLM prompt generator with TUI	s2p --help	optional	target_user"
     "utils.rust_proxy	rust_proxy - Transparent proxy routing for debugging network traffic	rust_proxy --help || rust_proxy --version	optional	target_user"
     "utils.aadc	aadc - ASCII diagram corrector for fixing malformed ASCII art	aadc --help || aadc --version	optional	target_user"
     "utils.caut	coding_agent_usage_tracker (caut) - LLM provider usage tracker	caut --help || caut --version	optional	target_user"

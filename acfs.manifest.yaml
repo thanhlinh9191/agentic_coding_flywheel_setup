@@ -3093,7 +3093,7 @@ modules:
       stars: 156
       cli_name: "s2p"
     dependencies:
-      - lang.rust
+      - lang.bun
     installed_check:
       run_as: target_user
       command: "command -v s2p"
@@ -3105,7 +3105,7 @@ modules:
       env: ["RU_NON_INTERACTIVE=1"]
     install: []
     verify:
-      - s2p --help || s2p --version
+      - s2p --help
 
   - id: utils.rust_proxy
     description: rust_proxy - Transparent proxy routing for debugging network traffic
