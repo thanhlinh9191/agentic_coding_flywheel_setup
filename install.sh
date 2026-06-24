@@ -1324,6 +1324,87 @@ acfs_remember_install_lock() {
     ACFS_INSTALL_LOCK_FILE="$2"
 }
 
+# Find the newest install-*.log under a log directory (the live log of the
+# currently-running installer). Echoes the path, or nothing if none found.
+acfs_latest_install_log() {
+    local log_dir="${1:-}"
+    [[ -n "$log_dir" ]] || return 1
+    [[ -d "$log_dir" ]] || return 1
+    local latest=""
+    # Newest by mtime; install log filenames are controlled (install-<ts>.log),
+    # so the ls-based approach is safe here.
+    # shellcheck disable=SC2012
+    latest="$(ls -1t "$log_dir"/install-*.log 2>/dev/null | head -n1 || true)"
+    [[ -n "$latest" ]] || return 1
+    printf '%s\n' "$latest"
+}
+
+# When another installer already holds the lock, attach to its progress instead
+# of just failing (#301). Prints a copy/pasteable tail command always, and, when
+# attached to an interactive terminal, follows the live log until the running
+# installer releases the lock, then returns so the caller can exit cleanly.
+#
+# Args: $1 = lock file path, $2 = log directory
+# Returns 0 if it followed to completion of the other installer, 1 otherwise.
+acfs_attach_to_running_install() {
+    local lock_file="${1:-}"
+    local log_dir="${2:-}"
+    local live_log=""
+    live_log="$(acfs_latest_install_log "$log_dir" 2>/dev/null || true)"
+
+    log_info "Another ACFS installer is already running on this machine."
+    if [[ -n "$live_log" ]]; then
+        log_info "Attaching to its progress. The live log is:"
+        log_info "    $live_log"
+        log_info "You can also watch it yourself any time with:"
+        log_info "    tail -f $live_log"
+    else
+        log_info "Lock file: $lock_file"
+        log_info "Watch its progress with:"
+        log_info "    tail -f ${log_dir}/install-*.log"
+    fi
+
+    # Only auto-follow when interactive and we found a log and have the tools.
+    if [[ ! -t 1 ]] || [[ -z "$live_log" ]] || ! command -v tail >/dev/null 2>&1; then
+        return 1
+    fi
+
+    log_info ""
+    log_info "Following live install output (Ctrl-C to stop watching; the running"
+    log_info "installer keeps going regardless)..."
+    log_info ""
+
+    # Follow the log, but stop once the lock becomes free (other installer done).
+    # A watcher polls the lock with a non-blocking flock; when it succeeds, the
+    # other installer has finished, so we terminate the tail and return.
+    if command -v flock >/dev/null 2>&1; then
+        local _tail_pid=""
+        tail -n +1 -f "$live_log" &
+        _tail_pid=$!
+        # Poll for lock release in this shell.
+        while kill -0 "$_tail_pid" 2>/dev/null; do
+            if (exec 197>"$lock_file") 2>/dev/null && flock -n 197 2>/dev/null; then
+                # Acquired -> the other installer released the lock (finished).
+                flock -u 197 2>/dev/null || true
+                { exec 197>&-; } 2>/dev/null || true
+                kill "$_tail_pid" 2>/dev/null || true
+                wait "$_tail_pid" 2>/dev/null || true
+                log_info ""
+                log_info "The running installer has finished. Re-run this command to"
+                log_info "continue or verify your installation (e.g. 'acfs doctor')."
+                return 0
+            fi
+            { exec 197>&-; } 2>/dev/null || true
+            sleep 2
+        done
+        return 0
+    fi
+
+    # No flock available for the watcher: just follow until the user stops.
+    tail -n +1 -f "$live_log"
+    return 0
+}
+
 acfs_release_install_lock() {
     case "${ACFS_INSTALL_LOCK_FD:-}" in
         198)
@@ -8098,7 +8179,12 @@ main() {
         fi
         if [[ -n "$_acfs_lock_fd" ]]; then
             if ! flock -n "$_acfs_lock_fd"; then
-                log_error "Another ACFS installer is already running."
+                # Another installer holds the lock. Rather than failing outright,
+                # attach to its live progress (and show how to watch it). (#301)
+                if acfs_attach_to_running_install "$_acfs_lock_file" "$_acfs_lock_dir/logs"; then
+                    # We followed the other installer to completion (interactive).
+                    exit 0
+                fi
                 log_error "Wait for it to finish, then retry. Lock file: $_acfs_lock_file"
                 exit 1
             fi
