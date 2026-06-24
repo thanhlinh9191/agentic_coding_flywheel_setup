@@ -1225,12 +1225,80 @@ update_shell_tool_state_improved() {
     [[ -z "$before_path" || "$after_path" != "$before_path" || "$after_version" != "$before_version" ]]
 }
 
+update_write_atuin_guard_wrapper() {
+    local wrapper_path="${1:-}"
+    local real_bin="${2:-}"
+    local real_bin_q=""
+    local backup_path=""
+
+    [[ -n "$wrapper_path" && -n "$real_bin" && -x "$real_bin" ]] || return 1
+    printf -v real_bin_q '%q' "$real_bin"
+
+    if [[ -e "$wrapper_path" || -L "$wrapper_path" ]]; then
+        if [[ ! -L "$wrapper_path" ]] && grep -Fq "agent hook integration disabled by ACFS" "$wrapper_path" 2>/dev/null; then
+            :
+        else
+            backup_path="${wrapper_path}.acfs-backup.$(date +%s).$$"
+            mv "$wrapper_path" "$backup_path" 2>/dev/null || return 1
+        fi
+    fi
+
+    {
+        cat <<'ATUIN_ACFS_WRAPPER_HEAD'
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_atuin_bin="${ATUIN_REAL_BIN:-}"
+if [[ -z "$real_atuin_bin" ]]; then
+ATUIN_ACFS_WRAPPER_HEAD
+        printf '    real_atuin_bin=%s\n' "$real_bin_q"
+        cat <<'ATUIN_ACFS_WRAPPER_TAIL'
+fi
+
+if [[ ! -x "$real_atuin_bin" ]]; then
+    echo "atuin wrapper: real atuin binary not found at $real_atuin_bin" >&2
+    exit 127
+fi
+
+if [[ "${1:-}" == "hook" ]]; then
+    echo "atuin wrapper: agent hook integration disabled by ACFS" >&2
+    exit 0
+fi
+
+_acfs_atuin_agent_context() {
+    local parent_comm=""
+
+    if [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CLAUDE_PROJECT_DIR:-}" || -n "${AGENT_NAME:-}" ]]; then
+        return 0
+    fi
+
+    parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
+    case "$parent_comm" in
+        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+if [[ "${1:-}" == "history" && ( "${2:-}" == "start" || "${2:-}" == "end" ) ]] && _acfs_atuin_agent_context; then
+    if [[ "${2:-}" == "start" ]]; then
+        printf '%s\n' "atuin-agent-history-disabled"
+    fi
+    exit 0
+fi
+
+exec "$real_atuin_bin" "$@"
+ATUIN_ACFS_WRAPPER_TAIL
+    } > "$wrapper_path"
+    chmod 0755 "$wrapper_path"
+}
+
 update_repair_atuin_install() {
     local target_user=""
     local target_home=""
     local preferred_src=""
     local primary_dir=""
     local user_bin=""
+    local installed_wrapper=false
 
     target_user="$(update_target_user)"
     target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
@@ -1249,10 +1317,18 @@ update_repair_atuin_install() {
         for dir in "${bin_dirs[@]}"; do
             [[ -n "$dir" ]] || continue
             mkdir -p "$dir" 2>/dev/null || true
-            if ln -sf "$preferred_src" "$dir/atuin" 2>/dev/null; then
-                log_to_file "Atuin symlink normalized: $dir/atuin -> $preferred_src"
+            if update_write_atuin_guard_wrapper "$dir/atuin" "$preferred_src" 2>/dev/null; then
+                installed_wrapper=true
+                if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+                    chown "$target_user:$target_user" "$dir/atuin" 2>/dev/null || chown "$target_user" "$dir/atuin" 2>/dev/null || true
+                fi
+                log_to_file "Atuin guard wrapper installed: $dir/atuin -> $preferred_src"
             fi
         done
+    fi
+
+    if [[ -x "$preferred_src" && "$installed_wrapper" != true ]]; then
+        return 1
     fi
 
     hash -r 2>/dev/null || true

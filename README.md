@@ -1684,8 +1684,10 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
 export PATH="$HOME/go/bin:$PATH"
 export PATH="$HOME/.bun/bin:$PATH"
-export PATH="$HOME/.atuin/bin:$PATH"
 ```
+
+Atuin is still installed, but ACFS keeps it behind the guarded `~/.local/bin/atuin`
+shim instead of putting `~/.atuin/bin` at the front of interactive shell `PATH`.
 
 **Modern CLI Aliases:**
 ```bash
@@ -1700,9 +1702,6 @@ alias lg='lazygit'
 
 **Tool Integrations:**
 ```bash
-# Atuin (better shell history)
-eval "$(atuin init zsh)"
-
 # Zoxide (smarter cd)
 eval "$(zoxide init zsh)"
 
@@ -1725,18 +1724,13 @@ source /usr/share/doc/fzf/examples/key-bindings.zsh
 | `Ctrl+Delete` | Delete word forward | Fast deletion |
 | `Home` | Beginning of line | Works in all terminals |
 | `End` | End of line | Works in all terminals |
-| `Ctrl+R` | Atuin history search | Interactive fuzzy search |
+| `Ctrl+R` | Shell history search | Uses the active shell/editor binding |
 
 **Atuin History Bindings:**
-The config forces Atuin bindings to load last (after OMZ plugins) ensuring `Ctrl+R` triggers Atuin's fuzzy history search rather than zsh's default:
-
-```bash
-# Forced at end of zshrc
-bindkey -e  # Emacs mode
-bindkey -M emacs '^R' atuin-search
-bindkey -M viins '^R' atuin-search-viins
-bindkey -M vicmd '^R' atuin-search-vicmd
-```
+ACFS intentionally does not enable Atuin's zsh preexec/precmd integration by
+default. Atuin's searchable CLI remains available as `atuin search`, but the
+automatic shell hook can record every coding-agent command and grow the Atuin
+database fast enough to make shells laggy.
 
 ### `~/.acfs/tmux/tmux.conf`
 

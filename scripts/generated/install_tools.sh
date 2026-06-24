@@ -460,6 +460,94 @@ install_tools_atuin() {
         fi
     fi
 
+    if [[ "${DRY_RUN:-false}" = "true" ]]; then
+        log_info "dry-run: install: real_bin=\"\$HOME/.atuin/bin/atuin\" (target_user)"
+    else
+        if ! run_as_target_shell <<'INSTALL_TOOLS_ATUIN'
+real_bin="$HOME/.atuin/bin/atuin"
+primary_dir="${ACFS_BIN_DIR:-$HOME/.local/bin}"
+fallback_dir="$HOME/.local/bin"
+
+write_atuin_guard_wrapper() {
+  local wrapper_path="${1:-}"
+  local real_bin_path="${2:-}"
+  local real_bin_q=""
+  local backup_path=""
+
+  [[ -n "$wrapper_path" && -n "$real_bin_path" && -x "$real_bin_path" ]] || return 1
+  printf -v real_bin_q "%q" "$real_bin_path"
+
+  if [[ -e "$wrapper_path" || -L "$wrapper_path" ]]; then
+    if [[ ! -L "$wrapper_path" ]] && grep -Fq "agent hook integration disabled by ACFS" "$wrapper_path" 2>/dev/null; then
+      :
+    else
+      backup_path="${wrapper_path}.acfs-backup.$(date +%s).$$"
+      mv "$wrapper_path" "$backup_path" 2>/dev/null || return 1
+    fi
+  fi
+
+  {
+    cat <<\ATUIN_ACFS_WRAPPER_HEAD
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_atuin_bin="${ATUIN_REAL_BIN:-}"
+if [[ -z "$real_atuin_bin" ]]; then
+ATUIN_ACFS_WRAPPER_HEAD
+    printf "    real_atuin_bin=%s\n" "$real_bin_q"
+    cat <<\ATUIN_ACFS_WRAPPER_TAIL
+fi
+
+if [[ ! -x "$real_atuin_bin" ]]; then
+    echo "atuin wrapper: real atuin binary not found at $real_atuin_bin" >&2
+    exit 127
+fi
+
+if [[ "${1:-}" == "hook" ]]; then
+    echo "atuin wrapper: agent hook integration disabled by ACFS" >&2
+    exit 0
+fi
+
+_acfs_atuin_agent_context() {
+    local parent_comm=""
+
+    if [[ -n "${CODEX_CI:-}" || -n "${CODEX_THREAD_ID:-}" || -n "${CLAUDE_PROJECT_DIR:-}" || -n "${AGENT_NAME:-}" ]]; then
+        return 0
+    fi
+
+    parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
+    case "$parent_comm" in
+        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+if [[ "${1:-}" == "history" && ( "${2:-}" == "start" || "${2:-}" == "end" ) ]] && _acfs_atuin_agent_context; then
+    if [[ "${2:-}" == "start" ]]; then
+        printf "%s\n" "atuin-agent-history-disabled"
+    fi
+    exit 0
+fi
+
+exec "$real_atuin_bin" "$@"
+ATUIN_ACFS_WRAPPER_TAIL
+  } > "$wrapper_path"
+  chmod 0755 "$wrapper_path"
+}
+
+for dir in "$primary_dir" "$fallback_dir"; do
+  [[ -n "$dir" ]] || continue
+  mkdir -p "$dir"
+  write_atuin_guard_wrapper "$dir/atuin" "$real_bin"
+  [[ "$fallback_dir" != "$primary_dir" ]] || break
+done
+INSTALL_TOOLS_ATUIN
+        then
+            log_error "tools.atuin: install command failed: real_bin=\"\$HOME/.atuin/bin/atuin\""
+            return 1
+        fi
+    fi
+
     # Verify
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
         log_info "dry-run: verify: ~/.atuin/bin/atuin --version (target_user)"

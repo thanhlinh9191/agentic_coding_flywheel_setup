@@ -2591,14 +2591,25 @@ EOF
     run update_repair_atuin_install
     assert_success
 
-    [[ -L "$ACFS_BIN_DIR/atuin" ]]
-    [[ -L "$target_home/.local/bin/atuin" ]]
+    [[ -x "$ACFS_BIN_DIR/atuin" ]]
+    [[ -x "$target_home/.local/bin/atuin" ]]
+    [[ ! -L "$ACFS_BIN_DIR/atuin" ]]
+    [[ ! -L "$target_home/.local/bin/atuin" ]]
 
-    run readlink "$ACFS_BIN_DIR/atuin"
-    assert_output "$target_home/.atuin/bin/atuin"
+    run "$ACFS_BIN_DIR/atuin" --version
+    assert_success
+    assert_output "atuin 18.14.1"
 
-    run readlink "$target_home/.local/bin/atuin"
-    assert_output "$target_home/.atuin/bin/atuin"
+    run "$ACFS_BIN_DIR/atuin" search cargo
+    assert_success
+    assert_output "target-home"
+
+    run env CODEX_THREAD_ID=test "$ACFS_BIN_DIR/atuin" history start
+    assert_success
+    assert_output "atuin-agent-history-disabled"
+
+    run "$ACFS_BIN_DIR/atuin" hook install claude-code
+    assert_success
 }
 
 @test "update_repair_atuin_install: normalizes custom and local shims" {
@@ -2618,14 +2629,18 @@ EOF
     run update_repair_atuin_install
     assert_success
 
-    [[ -L "$ACFS_BIN_DIR/atuin" ]]
-    [[ -L "$HOME/.local/bin/atuin" ]]
+    [[ -x "$ACFS_BIN_DIR/atuin" ]]
+    [[ -x "$HOME/.local/bin/atuin" ]]
+    [[ ! -L "$ACFS_BIN_DIR/atuin" ]]
+    [[ ! -L "$HOME/.local/bin/atuin" ]]
 
-    run readlink "$ACFS_BIN_DIR/atuin"
-    assert_output "$HOME/.atuin/bin/atuin"
+    run "$ACFS_BIN_DIR/atuin" --version
+    assert_success
+    assert_output "atuin 18.14.1"
 
-    run readlink "$HOME/.local/bin/atuin"
-    assert_output "$HOME/.atuin/bin/atuin"
+    run env CODEX_THREAD_ID=test "$HOME/.local/bin/atuin" history end atuin-agent-history-disabled
+    assert_success
+    assert_output ""
 }
 
 @test "update_repair_atuin_install: does not repair from current HOME for different unresolved target" {
@@ -2751,10 +2766,6 @@ EOF
         return 0
     }
 
-    _cli_normalize_atuin_shims() {
-        :
-    }
-
     _cli_run_as_user() {
         CLI_RUN_AS_USER_CALLS=$((CLI_RUN_AS_USER_CALLS + 1))
         mkdir -p "$TARGET_HOME/.atuin/bin"
@@ -2775,6 +2786,16 @@ EOF
 
     [[ "$CLI_RUN_AS_USER_CALLS" -eq 1 ]]
     [[ -x "$TARGET_HOME/.atuin/bin/atuin" ]]
+    [[ -x "$TARGET_HOME/.local/bin/atuin" ]]
+    [[ ! -L "$TARGET_HOME/.local/bin/atuin" ]]
+
+    run "$TARGET_HOME/.local/bin/atuin" --version
+    assert_success
+    assert_output "atuin 18.14.1"
+
+    run env CODEX_THREAD_ID=test "$TARGET_HOME/.local/bin/atuin" history start
+    assert_success
+    assert_output "atuin-agent-history-disabled"
 }
 
 @test "_cli_target_has_command: ignores current-shell-only PATH entries" {
@@ -2801,29 +2822,29 @@ EOF
     assert_failure
 }
 
-@test "acfs.zshrc: loads atuin env before atuin init" {
-    local zshrc="$PROJECT_ROOT/acfs/zsh/acfs.zshrc"
-    local env_line=""
-    local init_line=""
-
-    env_line="$(grep -nF 'source "$HOME/.atuin/bin/env"' "$zshrc" | cut -d: -f1)"
-    init_line="$(grep -nF 'eval "$("$_ACFS_ATUIN_BIN" init zsh)"' "$zshrc" | cut -d: -f1)"
-
-    [[ -n "$env_line" ]]
-    [[ -n "$init_line" ]]
-    (( env_line < init_line ))
-}
-
-@test "acfs.zshrc: resolves atuin binary once for init and bindings" {
+@test "acfs.zshrc: does not load Atuin shell hooks" {
     local zshrc="$PROJECT_ROOT/acfs/zsh/acfs.zshrc"
 
-    run grep -F '_ACFS_ATUIN_BIN=""' "$zshrc"
-    assert_success
+    run grep -F 'source "$HOME/.atuin/bin/env"' "$zshrc"
+    assert_failure
 
     run grep -F 'eval "$("$_ACFS_ATUIN_BIN" init zsh)"' "$zshrc"
+    assert_failure
+
+    run grep -F 'atuin-search' "$zshrc"
+    assert_failure
+}
+
+@test "acfs.zshrc: keeps Atuin behind the guarded shim" {
+    local zshrc="$PROJECT_ROOT/acfs/zsh/acfs.zshrc"
+
+    run grep -F '_ACFS_ATUIN_BIN' "$zshrc"
+    assert_failure
+
+    run grep -F 'guarded shim in ~/.local/bin' "$zshrc"
     assert_success
 
-    run grep -F 'if [[ -n "$_ACFS_ATUIN_BIN" ]]; then' "$zshrc"
+    run grep -F 'bindkey -e' "$zshrc"
     assert_success
 }
 

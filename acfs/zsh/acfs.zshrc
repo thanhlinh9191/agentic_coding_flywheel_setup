@@ -36,27 +36,14 @@ export BUN_INSTALL="$HOME/.bun"
 [[ -d "$BUN_INSTALL/bin" ]] && export PATH="$BUN_INSTALL/bin:$PATH"
 [[ -s "$HOME/.bun/_bun" ]] && source "$HOME/.bun/_bun"
 
-# Atuin (installer default)
-if [[ -f "$HOME/.atuin/bin/env" ]]; then
-  source "$HOME/.atuin/bin/env"
-elif [[ -d "$HOME/.atuin/bin" ]]; then
-  export PATH="$HOME/.atuin/bin:$PATH"
-fi
-
 # Ensure user-local binaries take precedence (e.g., native Claude install).
 export PATH="$HOME/.local/bin:$PATH"
 if command -v zsh &>/dev/null; then
   export SHELL="$(command -v zsh)"
 fi
 
-_ACFS_ATUIN_BIN=""
-if command -v atuin &>/dev/null; then
-  _ACFS_ATUIN_BIN="$(command -v atuin)"
-elif [[ -x "$HOME/.local/bin/atuin" ]]; then
-  _ACFS_ATUIN_BIN="$HOME/.local/bin/atuin"
-elif [[ -x "$HOME/.atuin/bin/atuin" ]]; then
-  _ACFS_ATUIN_BIN="$HOME/.atuin/bin/atuin"
-fi
+# Atuin remains available through the guarded shim in ~/.local/bin. Do not
+# source Atuin's env file here; it can put the real binary ahead of the shim.
 
 # --- Oh My Zsh ---
 export ZSH="$HOME/.oh-my-zsh"
@@ -229,11 +216,6 @@ export NVM_DIR="$HOME/.nvm"
 [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
 [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
 
-# Atuin init (after PATH)
-if [[ -n "$_ACFS_ATUIN_BIN" ]]; then
-  eval "$("$_ACFS_ATUIN_BIN" init zsh)"
-fi
-
 # Zoxide (better cd)
 command -v zoxide &>/dev/null && eval "$(zoxide init zsh)"
 
@@ -255,13 +237,8 @@ fi
 # --- Local overrides ---
 [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
 
-# --- Force Atuin bindings (must be last) ---
+# --- Shell editing mode ---
 bindkey -e
-if [[ -n "$_ACFS_ATUIN_BIN" ]]; then
-  bindkey -M emacs '^R' atuin-search 2>/dev/null
-  bindkey -M viins '^R' atuin-search-viins 2>/dev/null
-  bindkey -M vicmd '^R' atuin-search-vicmd 2>/dev/null
-fi
 
 # --- ACFS env shim (optional) ---
 [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env"
