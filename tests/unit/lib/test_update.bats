@@ -2882,6 +2882,25 @@ EOF
     assert_failure
 }
 
+@test "Atuin guard wrappers recognize Antigravity agent contexts" {
+    local agent_contexts='claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node'
+
+    run grep -F "$agent_contexts" "$PROJECT_ROOT/acfs.manifest.yaml"
+    assert_success
+
+    run grep -F "$agent_contexts" "$PROJECT_ROOT/install.sh"
+    assert_success
+
+    run grep -F "$agent_contexts" "$PROJECT_ROOT/scripts/generated/install_tools.sh"
+    assert_success
+
+    run grep -F "$agent_contexts" "$PROJECT_ROOT/scripts/lib/cli_tools.sh"
+    assert_success
+
+    run grep -F "$agent_contexts" "$PROJECT_ROOT/scripts/lib/update.sh"
+    assert_success
+}
+
 @test "sync_acfs_zsh_loader: removes duplicate local override sourcing" {
     cat > "$HOME/.zshrc" <<'EOF'
 # ACFS loader

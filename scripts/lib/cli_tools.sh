@@ -424,7 +424,7 @@ _acfs_atuin_agent_context() {
 
     parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
     case "$parent_comm" in
-        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node) return 0 ;;
         *) return 1 ;;
     esac
 }
