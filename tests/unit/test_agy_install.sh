@@ -8,7 +8,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit
 
 PASS=0 FAIL=0
 ok()   { printf '  ✓ PASS: %s\n' "$1"; PASS=$((PASS+1)); }
@@ -48,10 +48,22 @@ check "manifest drift is clean" \
   "bash scripts/check-manifest-drift.sh --quiet >/dev/null 2>&1"
 
 # 7. Config/conventions reference agy (zshrc launcher + doctor check).
-check "acfs.zshrc defines an agy() launcher" \
-  "grep -q '^agy()' acfs/zsh/acfs.zshrc"
-check "acfs.zshrc agy() pins the required model" \
-  "grep -A2 '^agy()' acfs/zsh/acfs.zshrc | grep -q 'Gemini 3.1 Pro (High)'"
+check "acfs.zshrc maps agy to the locked launcher" \
+  "grep -q \"alias agy='\\\$HOME/.local/bin/agy-locked'\" acfs/zsh/acfs.zshrc"
+check "acfs.zshrc maps gmi to the locked agy launcher" \
+  "grep -q \"alias gmi='\\\$HOME/.local/bin/agy-locked'\" acfs/zsh/acfs.zshrc"
+check "uca updates agy instead of gemini-cli" \
+  "grep '^alias uca=' acfs/zsh/acfs.zshrc | grep -q 'agy\" update' && ! grep '^alias uca=' acfs/zsh/acfs.zshrc | grep -q '@google/gemini-cli'"
+check "agy locked launcher pins the required model" \
+  "grep -q 'MODEL = \"Gemini 3.1 Pro (High)\"' scripts/lib/agy_locked.py"
+check "agy locked launcher pins always-proceed tool permission" \
+  "grep -q '\"toolPermission\": \"always-proceed\"' scripts/lib/agy_locked.py"
+check "agy locked launcher installs dcg hook support" \
+  "grep -q 'dcg-antigravity-hook.py' scripts/lib/agy_locked.py"
+check "agy locked launcher supports installer priming" \
+  "grep -q -- '--acfs-prime-settings' scripts/lib/agy_locked.py"
+check "agy locked launcher is valid Python" \
+  "python3 -m py_compile scripts/lib/agy_locked.py"
 check "doctor checks for the agy alias" \
   "grep -q 'agent.alias.agy' scripts/lib/doctor.sh"
 

@@ -16,7 +16,8 @@ forward path for all new work.
 
 ## Guiding principle (applied everywhere)
 
-- **Operational** ("start a session" / spawn / recommend / default swarm) → `agy`.
+- **Operational** ("start a session" / spawn / recommend / default swarm) → `agy`
+  through the ACFS `agy-locked` launcher.
 - **Historical** (resume/read/discover an existing Gemini session) → keep `gmi`/`gemini`.
 - **Model mandate**: every `agy` invocation is pinned to **`Gemini 3.1 Pro (High)`** —
   the only allowed model. Single source of truth: `scripts/lib/agy_model_guard.sh`
@@ -29,7 +30,7 @@ forward path for all new work.
 
 | Surface | Status | Notes |
 |---|---|---|
-| **ACFS install** | ✅ | `agents.antigravity` manifest module (verified_installer, checksum-gated); `uca` updates agy; `agy()` model-pinned launcher in acfs.zshrc; `doctor` checks `agent.alias.agy`. |
+| **ACFS install** | ✅ | `agents.antigravity` manifest module (verified_installer, checksum-gated); `uca` updates agy; `agy-locked` pins settings/model, installs the Antigravity dcg hook, and backs both `agy` and `gmi`. |
 | **ACFS docs/onboarding** | ✅ | AGENTS.md, README, onboarding lessons, info/report/continue/cheatsheet, swarm-default mixes (`--agy=`). |
 | **ACFS checksum monitor** | ✅ | `antigravity` in `KNOWN_INSTALLERS` + `checksums.yaml`; monitored like uv/rustup/bun. |
 | **Shared e2e harness** | ✅ | `scripts/lib/agy_e2e_harness.sh` (structured logging, skip-if-unauth, model-guard, headless round-trip). |
@@ -65,15 +66,16 @@ history and must not break:
 
 - casr `src/providers/gemini.rs`, ntm/cass gemini discovery, dcg `Agent::GeminiCli`,
   caam legacy gemini account handling, franken gemini connector.
-- ACFS `agents.gemini` manifest module + `gmi()` zshrc launcher (relabelled legacy).
+- ACFS `agents.gemini` manifest module is optional legacy; `gmi` now launches the
+  same `agy-locked` forward path as `agy`.
 - Doc tables that list `--gmi=N` as a legacy flag alongside `--agy=N`.
 
 ## Keep / remove decision (final) + user comms
 
-- **Decision: keep `gmi` as a labeled legacy reader everywhere; never remove it.**
-  Old `~/.gemini/tmp/<hash>/chats/*.json` history must stay readable/resumable
-  indefinitely so previously-indexed data is never stranded. Only the *forward*
-  path (spawn / recommend / default swarm / new sessions) moved to `agy`.
+- **Decision: keep the old Gemini history readable through history/indexing tools,
+  but make the `gmi` command launch `agy-locked`.** Old
+  `~/.gemini/tmp/<hash>/chats/*.json` data must stay readable/resumable by tools
+  that understand it, but the shell command no longer starts the retired CLI.
 - **Sequencing met the deadline**: the user-facing path — ACFS install, `ntm spawn`,
   cass index, casr resume, the skills, and the swarm helpers — all drive `agy`
   before the 2026-06-18 retirement; agy was installed+authed on all 7 machines first.

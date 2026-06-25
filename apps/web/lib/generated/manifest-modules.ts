@@ -32,7 +32,7 @@ export interface ManifestProvenanceMetadata {
 
 export const manifestProvenance = {
   acfsVersion: "0.7.0",
-  manifestSha256: "87d6c7762648da45c90b2bf7f8439a45b31b67d44905d09695d56165107b538c",
+  manifestSha256: "68ada50689c30f1a9212481f5a53da562d704ed881ad92658e68a41b52d421ec",
   checksumsYamlSha256: "3c3f1fb130915218c4d1f3b567775986e7640a1daeb9ce8263485c9d546abc04",
 } as const satisfies ManifestProvenanceMetadata;
 
@@ -336,7 +336,7 @@ export const manifestModules: ManifestModuleMetadata[] = [
   },
   {
     id: "agents.gemini",
-    description: "Google Gemini CLI",
+    description: "Legacy Google Gemini CLI (retired; not installed by default)",
     category: "agents",
     phase: 7,
     dependencies: [
@@ -344,11 +344,11 @@ export const manifestModules: ManifestModuleMetadata[] = [
       "lang.nvm",
     ],
     tags: [
-      "recommended",
+      "legacy",
       "agent",
     ],
-    enabledByDefault: true,
-    optional: false,
+    enabledByDefault: false,
+    optional: true,
   },
   {
     id: "agents.antigravity",
@@ -990,7 +990,7 @@ export const manifestModules: ManifestModuleMetadata[] = [
     dependencies: [
       "agents.claude",
       "agents.codex",
-      "agents.gemini",
+      "agents.antigravity",
       "cli.modern",
     ],
     tags: [
@@ -1084,7 +1084,7 @@ export const manifestSelectionProfiles: ManifestSelectionProfile[] = [
       "lang.uv",
       "agents.claude",
       "agents.codex",
-      "agents.gemini",
+      "agents.antigravity",
       "stack.ntm",
       "stack.mcp_agent_mail",
       "stack.ultimate_bug_scanner",

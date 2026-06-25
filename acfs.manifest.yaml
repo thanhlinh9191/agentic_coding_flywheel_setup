@@ -801,7 +801,7 @@ modules:
 
               parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
               case "$parent_comm" in
-                  claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+                  claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node) return 0 ;;
                   *) return 1 ;;
               esac
           }
@@ -947,13 +947,13 @@ modules:
         "$target_bin/codex" --version || "$target_bin/codex" --help
 
   - id: agents.gemini
-    description: Google Gemini CLI
+    description: Legacy Google Gemini CLI (retired; not installed by default)
     category: agents
     phase: 7
     run_as: target_user
-    optional: false
-    enabled_by_default: true
-    tags: [recommended, agent]
+    optional: true
+    enabled_by_default: false
+    tags: [legacy, agent]
     dependencies:
       - lang.bun
       - lang.nvm
@@ -1074,7 +1074,7 @@ modules:
     notes:
       - "Pin the model to 'Gemini 3.1 Pro (High)' on every invocation (see scripts/lib/agy_model_guard.sh)"
       - "Auth is Google OAuth (a human step); the agy() shell function in acfs.zshrc launches it model-pinned"
-      - "Legacy gmi/Gemini CLI (agents.gemini) is kept only for reading old ~/.gemini/tmp history"
+      - "ACFS installs agy-locked and maps both agy and gmi to it; the legacy Gemini CLI module is not installed by default"
 
   - id: agents.opencode
     description: OpenCode (multi-provider agent harness)
@@ -3334,7 +3334,7 @@ modules:
     dependencies:
       - agents.claude
       - agents.codex
-      - agents.gemini
+      - agents.antigravity
       - cli.modern
     installed_check:
       run_as: target_user
@@ -3359,7 +3359,7 @@ modules:
           "    0:welcome  - This instructions window" \
           "    1:claude   - Claude Code (Anthropic)" \
           "    2:codex    - Codex CLI (OpenAI)" \
-          "    3:gemini   - Gemini CLI (Google)" \
+          "    3:agy      - Antigravity CLI (Google)" \
           "" \
           "  TMUX BASICS:" \
           "    Ctrl-b d        - Detach (keep session running)" \
@@ -3370,7 +3370,7 @@ modules:
           "  START AN AGENT:" \
           "    claude          - Start Claude Code" \
           "    codex           - Start Codex CLI" \
-          "    gemini          - Start Gemini CLI" \
+          "    agy             - Start Antigravity CLI" \
           "" \
           "  PROJECT: /data/projects/my_first_project" \
           "  (Rename with: mv /data/projects/my_first_project /data/projects/NEW_NAME)" \
@@ -3385,7 +3385,7 @@ modules:
           # Add agent windows
           tmux new-window -t "$SESSION_NAME" -n "claude" -c /data/projects/my_first_project
           tmux new-window -t "$SESSION_NAME" -n "codex" -c /data/projects/my_first_project
-          tmux new-window -t "$SESSION_NAME" -n "gemini" -c /data/projects/my_first_project
+          tmux new-window -t "$SESSION_NAME" -n "agy" -c /data/projects/my_first_project
 
           # Send instructions to welcome window
           tmux send-keys -t "$SESSION_NAME:welcome" "cat ~/.acfs/workspace-instructions.txt" Enter

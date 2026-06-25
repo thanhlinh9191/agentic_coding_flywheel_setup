@@ -3554,7 +3554,7 @@ acfs_parse_checksums_content() {
 
 acfs_required_upstream_tools() {
     printf '%s\n' \
-        atuin bun bv caam cass claude cm dcg gemini_patch mcp_agent_mail ntm ohmyzsh ru rust slb ubs uv zoxide
+        antigravity atuin bun bv caam cass claude cm dcg gemini_patch mcp_agent_mail ntm ohmyzsh ru rust slb ubs uv zoxide
 }
 
 acfs_validate_upstream_checksums() {
@@ -5779,7 +5779,7 @@ _acfs_atuin_agent_context() {
 
     parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
     case "$parent_comm" in
-        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -5862,6 +5862,15 @@ install_languages() {
 # ============================================================
 # Phase 6: Coding agents
 # ============================================================
+install_agy_locked_launchers() {
+    acfs_ensure_primary_bin_dir 2>/dev/null || true
+
+    try_step "Installing agy locked launcher" install_asset "scripts/lib/agy_locked.py" "$ACFS_BIN_DIR/agy-locked" || return 1
+    try_step "Installing gmi Antigravity launcher" install_asset "scripts/lib/agy_locked.py" "$ACFS_BIN_DIR/gmi" || return 1
+    try_step "Setting agy launcher permissions" $SUDO chmod 0755 "$ACFS_BIN_DIR/agy-locked" "$ACFS_BIN_DIR/gmi" || return 1
+    try_step "Setting agy launcher ownership" $SUDO chown "$TARGET_USER:$TARGET_USER" "$ACFS_BIN_DIR/agy-locked" "$ACFS_BIN_DIR/gmi" || true
+}
+
 install_agents_phase() {
     set_phase "agents" "Coding Agents"
     log_step "6/9" "Installing coding agents..."
@@ -5897,6 +5906,8 @@ install_agents_phase() {
                 try_step "Linking Claude Code into $ACFS_BIN_DIR" acfs_link_primary_bin_command "$claude_candidate" "claude" || true
             fi
         fi
+
+        install_agy_locked_launchers || log_warn "agy locked launcher installation failed"
 
         log_success "Coding agents installed"
         return 0
@@ -5999,41 +6010,15 @@ install_agents_phase() {
         fi
     fi
 
-    # Gemini CLI (install as target user)
-    log_detail "Installing Gemini CLI for $TARGET_USER"
-    try_step "Installing Gemini CLI" run_as_target "$bun_bin" install -g --trust @google/gemini-cli@latest || true
-
-    # Create wrapper script that uses bun as runtime (avoids node PATH issues)
-    local gemini_bin_local="$ACFS_BIN_DIR/gemini"
-    if [[ -x "$TARGET_HOME/.bun/bin/gemini" ]] && [[ ! -x "$gemini_bin_local" ]]; then
-        local gemini_wrapper_tmp=""
-        gemini_wrapper_tmp="$(mktemp "${TMPDIR:-/tmp}/acfs-gemini-wrapper.XXXXXX")" || true
-        if [[ -n "$gemini_wrapper_tmp" ]]; then
-            printf '%s\n' '#!/bin/bash' "exec \"$TARGET_HOME/.bun/bin/bun\" \"$TARGET_HOME/.bun/bin/gemini\" \"\$@\"" > "$gemini_wrapper_tmp"
-            chmod 0755 "$gemini_wrapper_tmp" || true
-            try_step "Creating Gemini bun wrapper" acfs_install_executable_into_primary_bin "$gemini_wrapper_tmp" "gemini" || true
-            rm -f "$gemini_wrapper_tmp" 2>/dev/null || true
-        fi
+    # Antigravity CLI (agy): standalone native binary. The locked wrapper keeps
+    # the model/settings/DCG hook pinned while leaving the real agy binary intact.
+    if [[ -x "$ACFS_BIN_DIR/agy" || -x "$TARGET_HOME/.local/bin/agy" ]]; then
+        log_detail "Antigravity CLI already installed"
+    else
+        log_detail "Installing Antigravity CLI for $TARGET_USER"
+        try_step "Installing Antigravity CLI" acfs_run_verified_upstream_script_as_target "antigravity" "bash" || true
     fi
-
-    # Apply Gemini CLI patches (EBADF crash fix, rate-limit retry, quota retry)
-    if [[ -x "$TARGET_HOME/.bun/bin/gemini" ]]; then
-        log_detail "Applying Gemini CLI patches (EBADF, retry, quota)"
-        if _ensure_target_nvm_node; then
-            local gemini_nvm_bin=""
-            if gemini_nvm_bin="$(_target_latest_nvm_node_bin)"; then
-                try_step "Patching Gemini CLI" \
-                    acfs_run_verified_upstream_script_as_target_with_env \
-                    "gemini_patch" "bash" "PATH=$gemini_nvm_bin:$PATH" || \
-                    log_warn "Gemini CLI patches were not applied (continuing)"
-            else
-                log_warn "Skipping Gemini CLI patch because no nvm Node.js bin was found after install"
-            fi
-        else
-            log_warn "Skipping Gemini CLI patch because Node.js via nvm could not be prepared"
-            log_warn "Re-run phase 5 or install nvm manually, then re-run the Gemini patch"
-        fi
-    fi
+    install_agy_locked_launchers || log_warn "agy locked launcher installation failed"
 
     log_success "Coding agents installed"
 }
@@ -6536,7 +6521,7 @@ install_stack_phase() {
             # Config format fixed for proper [models] section (bd-2od5.2.5)
             if run_as_target tee "$ntm_config_file" > /dev/null << 'NTM_CONFIG_EOF'
 # NTM Configuration - created by ACFS
-# Updated model defaults for ChatGPT Pro and Gemini accounts
+# Updated model defaults for ChatGPT Pro and Antigravity accounts
 
 # Base directory for projects (matches ACFS workspace_root)
 projects_base = "/data/projects"
@@ -6545,14 +6530,11 @@ projects_base = "/data/projects"
 # Default models when no specifier given
 default_claude = "claude-opus-4-8"
 default_codex = "gpt-5.5"
-default_gemini = "gemini-3-pro-preview"
+default_gemini = "Gemini 3.1 Pro (High)"
 
 [agents]
-# Override gemini command to set TERM=xterm-256color (issue #178).
-# When TERM=tmux-256color (the tmux default-terminal), a node-pty bug
-# in gemini-cli causes SIGHUP on all shell tool invocations.
-# Scoping the override here keeps tmux and other panes on tmux-256color.
-gemini = "TERM=xterm-256color gemini{{if .Model}} --model {{shellQuote .Model}}{{end}} --yolo"
+# Route legacy Gemini slots through ACFS's locked Antigravity launcher.
+gemini = "agy-locked{{if .Model}} --model {{shellQuote .Model}}{{end}}"
 NTM_CONFIG_EOF
             then
                 log_success "NTM config created with current model defaults"
@@ -7366,6 +7348,9 @@ finalize() {
     try_step "Installing autofix.sh" install_asset "scripts/lib/autofix.sh" "$ACFS_HOME/scripts/lib/autofix.sh" || return 1
     try_step "Installing doctor_fix.sh" install_asset "scripts/lib/doctor_fix.sh" "$ACFS_HOME/scripts/lib/doctor_fix.sh" || return 1
     try_step "Installing doctor.sh" install_asset "scripts/lib/doctor.sh" "$ACFS_HOME/scripts/lib/doctor.sh" || return 1
+    try_step "Installing agy_model_guard.sh" install_asset "scripts/lib/agy_model_guard.sh" "$ACFS_HOME/scripts/lib/agy_model_guard.sh" || return 1
+    try_step "Installing agy_e2e_harness.sh" install_asset "scripts/lib/agy_e2e_harness.sh" "$ACFS_HOME/scripts/lib/agy_e2e_harness.sh" || return 1
+    try_step "Installing agy_locked.py" install_asset "scripts/lib/agy_locked.py" "$ACFS_HOME/scripts/lib/agy_locked.py" || return 1
     try_step "Installing nightly_update.sh (source)" install_asset "scripts/lib/nightly_update.sh" "$ACFS_HOME/scripts/lib/nightly_update.sh" || return 1
     try_step "Installing nightly-update.sh (runtime wrapper)" install_asset "scripts/lib/nightly_update.sh" "$ACFS_HOME/scripts/nightly-update.sh" || return 1
     try_step "Installing update.sh" install_asset "scripts/lib/update.sh" "$ACFS_HOME/scripts/lib/update.sh" || return 1
@@ -7523,78 +7508,21 @@ CLAUDE_TRUST_EOF
             log_detail "Claude settings created with workspace trust"
         fi
 
-        # Gemini CLI trust pre-configuration (fixes #159 follow-up)
-        # Gemini CLI prompts for folder trust on first run. Pre-configure trusted
-        # folders so agents can start without interactive approval.
-        local gemini_settings_file="$TARGET_HOME/.gemini/settings.json"
-        if [[ -f "$gemini_settings_file" ]] && command -v jq &>/dev/null; then
-            local tmp_gemini="${gemini_settings_file}.tmp.$$"
-            # Enable folder trust and set yolo-equivalent sandbox bypass
-            if run_as_target bash -c "jq '
-                .security = (.security // {})
-                | .security.folderTrust = (.security.folderTrust // {})
-                | .security.folderTrust.enabled = true
-            ' \"\$1\" > \"\$2\" && mv \"\$2\" \"\$1\"" \
-                    _ "$gemini_settings_file" "$tmp_gemini" 2>/dev/null; then
-                log_detail "Gemini workspace trust configured"
-            else
-                run_as_target rm -f "$tmp_gemini" 2>/dev/null || true
-            fi
-        elif [[ ! -f "$gemini_settings_file" ]]; then
-            run_as_target mkdir -p "$TARGET_HOME/.gemini" 2>/dev/null || true
-            run_as_target tee "$gemini_settings_file" > /dev/null << 'GEMINI_TRUST_EOF'
-{
-  "security": {
-    "folderTrust": {
-      "enabled": true
-    }
-  }
-}
-GEMINI_TRUST_EOF
-            log_detail "Gemini settings created with workspace trust"
+        # Antigravity policy priming. The agy-locked launcher owns the forward
+        # settings path and the DCG hook registration; legacy Gemini trust files
+        # are intentionally not written for new installs.
+        local agy_locked_bin="$ACFS_BIN_DIR/agy-locked"
+        if [[ ! -x "$agy_locked_bin" && -x "$TARGET_HOME/.local/bin/agy-locked" ]]; then
+            agy_locked_bin="$TARGET_HOME/.local/bin/agy-locked"
         fi
-
-        # Pre-populate Gemini trusted folders list so agents skip the
-        # interactive "Trust this folder?" prompt entirely.
-        # Gemini CLI 0.33.0+ expects trustedFolders.json as a JSON object
-        # mapping folder paths to "TRUST_FOLDER", not a JSON array.
-        local gemini_trusted_folders="$TARGET_HOME/.gemini/trustedFolders.json"
-        if [[ ! -f "$gemini_trusted_folders" ]]; then
-            local tmp_folders="${gemini_trusted_folders}.tmp.$$"
-            if run_as_target bash -c '
-                jq -n --arg home "$1" '"'"'{"/data/projects": "TRUST_FOLDER", ($home): "TRUST_FOLDER"}'"'"' > "$2" &&
-                mv "$2" "$3"
-            ' _ "$TARGET_HOME" "$tmp_folders" "$gemini_trusted_folders" 2>/dev/null; then
-                log_detail "Gemini trusted folders pre-configured"
+        if [[ -x "$agy_locked_bin" ]]; then
+            if run_as_target "$agy_locked_bin" --acfs-prime-settings 2>/dev/null; then
+                log_detail "Antigravity locked settings and DCG hook primed"
             else
-                run_as_target rm -f "$tmp_folders" 2>/dev/null || true
-                log_warn "Gemini trusted folders pre-configuration failed"
+                log_warn "Antigravity locked settings priming failed"
             fi
-        elif command -v jq &>/dev/null; then
-            # Merge paths into existing file, handling both legacy array format
-            # and current object format (fixes #213).
-            local tmp_folders="${gemini_trusted_folders}.tmp.$$"
-            if run_as_target bash -c '
-                content=$(cat "$1" 2>/dev/null) || content="{}"
-                is_array=$(echo "$content" | jq -e "type == \"array\"" 2>/dev/null) || is_array="false"
-                if [ "$is_array" = "true" ]; then
-                    # Migrate legacy array format to object format
-                    migrated=$(echo "$content" | jq "reduce .[] as \$p ({}; . + {(\$p): \"TRUST_FOLDER\"})")
-                    content="$migrated"
-                fi
-                # Merge required paths into object
-                updated=$(echo "$content" | jq \
-                    --arg p1 "/data/projects" \
-                    --arg p2 "$2" \
-                    ". + {(\$p1): \"TRUST_FOLDER\", (\$p2): \"TRUST_FOLDER\"}")
-                if [ "$updated" != "$content" ]; then
-                    echo "$updated" > "$3" && mv "$3" "$1"
-                fi
-            ' _ "$gemini_trusted_folders" "$TARGET_HOME" "$tmp_folders" 2>/dev/null; then
-                log_detail "Gemini trusted folders updated"
-            else
-                run_as_target rm -f "$tmp_folders" 2>/dev/null || true
-            fi
+        else
+            log_warn "agy-locked launcher not found; Antigravity settings will be primed on first agy launch"
         fi
     fi
 
@@ -7772,17 +7700,18 @@ run_smoke_test() {
         ((critical_failed += 1))
     fi
 
-    # 6) claude, codex, gemini commands exist
+    # 6) claude, codex, agy commands exist
     local missing_agents=()
     [[ -x "$ACFS_BIN_DIR/claude" || -x "$TARGET_HOME/.bun/bin/claude" ]] || missing_agents+=("claude")
     [[ -x "$TARGET_HOME/.bun/bin/codex" || -x "$ACFS_BIN_DIR/codex" ]] || missing_agents+=("codex")
-    [[ -x "$TARGET_HOME/.bun/bin/gemini" || -x "$ACFS_BIN_DIR/gemini" ]] || missing_agents+=("gemini")
+    [[ -x "$ACFS_BIN_DIR/agy" || -x "$TARGET_HOME/.local/bin/agy" ]] || missing_agents+=("agy")
+    [[ -x "$ACFS_BIN_DIR/agy-locked" || -x "$TARGET_HOME/.local/bin/agy-locked" ]] || missing_agents+=("agy-locked")
     if [[ ${#missing_agents[@]} -eq 0 ]]; then
-        echo "✅ Agents: claude, codex, gemini" >&2
+        echo "✅ Agents: claude, codex, agy" >&2
         ((critical_passed += 1))
     else
         echo "✖ Agents: missing ${missing_agents[*]}" >&2
-        echo "    Fix: $(acfs_smoke_install_fix_command agents.claude agents.codex agents.gemini)" >&2
+        echo "    Fix: $(acfs_smoke_install_fix_command agents.claude agents.codex agents.antigravity)" >&2
         ((critical_failed += 1))
     fi
 

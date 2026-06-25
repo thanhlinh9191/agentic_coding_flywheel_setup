@@ -91,7 +91,7 @@ graph LR
     subgraph agents ["AI Agents"]
         CLAUDE["Claude Code"]
         CODEX["Codex CLI"]
-        GEMINI["Gemini CLI"]
+        AGY["Antigravity CLI"]
     end
 
     LAPTOP --> BROWSER
@@ -101,7 +101,7 @@ graph LR
     INSTALLER --> CONFIGURED
     CONFIGURED --> CLAUDE
     CONFIGURED --> CODEX
-    CONFIGURED --> GEMINI
+    CONFIGURED --> AGY
 
     classDef user fill:#e3f2fd,stroke:#90caf9,stroke-width:2px
     classDef wizard fill:#fff8e1,stroke:#ffcc80,stroke-width:2px
@@ -171,7 +171,7 @@ flowchart TB
     AcfsHome["~/.acfs/<br/>configs + scripts + state.json"]
     Commands["Commands<br/>acfs doctor / acfs update / acfs services-setup / onboard"]
     Tools["Installed tools<br/>bun/uv/rust/go + tmux/rg/gh + vault + ..."]
-    Agents["Agent CLIs<br/>claude / codex / gemini"]
+    Agents["Agent CLIs<br/>claude / codex / agy"]
     Stack["Stack tools<br/>ntm / mcp_agent_mail / ubs / bv / cass / cm / caam / slb / dcg / ru"]
   end
 
@@ -466,7 +466,7 @@ graph TD
     C["Phase 3: Shell Setup<br/><small>zsh, oh-my-zsh, powerlevel10k</small>"]
     D["Phase 4: CLI Tools<br/><small>ripgrep, fzf, lazygit, etc.</small>"]
     E["Phase 5: Language Runtimes<br/><small>bun, uv, rust, go</small>"]
-    F["Phase 6: AI Agents<br/><small>claude, codex, gemini</small>"]
+    F["Phase 6: AI Agents<br/><small>claude, codex, agy</small>"]
     G["Phase 7: Cloud Tools<br/><small>vault, wrangler, supabase, vercel</small>"]
     H["Phase 8: Dicklesworthstone Stack<br/><small>ntm, dcg, ru, ubs, mcp_agent_mail, etc.</small>"]
     I["Phase 9: Configuration<br/><small>Deploy acfs.zshrc, tmux.conf</small>"]
@@ -947,7 +947,7 @@ The Learning Hub provides interactive lessons with progress tracking:
 | 3 | tmux Basics | 7 min | Sessions, windows, panes, survival |
 | 4 | Git Essentials | 10 min | Version control, dangerous operations |
 | 5 | GitHub CLI | 8 min | Issues, PRs, releases via `gh` |
-| 6 | Agent Commands | 10 min | Claude, Codex, Gemini usage |
+| 6 | Agent Commands | 10 min | Claude, Codex, Antigravity usage |
 | 7 | NTM Command Center | 8 min | Session orchestration |
 | 8 | NTM Prompt Palette | 6 min | Quick command access |
 | 9 | The Flywheel Loop | 8 min | How all 10 tools work together |
@@ -1241,11 +1241,9 @@ alias cc='NODE_OPTIONS="--max-old-space-size=32768" claude --dangerously-skip-pe
 # Codex with bypass and dangerous filesystem access
 alias cod='codex --dangerously-bypass-approvals-and-sandbox'
 
-# Antigravity CLI (successor to the retired Gemini CLI), model-pinned + auto-approve
-agy() { command agy --model "Gemini 3.1 Pro (High)" --dangerously-skip-permissions "$@"; }
-
-# Gemini CLI — LEGACY (retired 2026-06-18; kept only to read old ~/.gemini/tmp history)
-alias gmi='gemini --yolo'
+# Antigravity CLI, model/settings/DCG locked by the ACFS launcher
+alias agy='$HOME/.local/bin/agy-locked'
+alias gmi='$HOME/.local/bin/agy-locked'
 ```
 
 **Installation & Updates:**
@@ -1331,7 +1329,7 @@ $ acfs doctor
 ║ Agents                                                        ║
 ║   ✔ claude 1.0.24                                             ║
 ║   ✔ codex 0.1.2504252326                                      ║
-║   ✔ gemini 0.1.12                                             ║
+║   ✔ agy 1.0.12                                                ║
 ║                                                               ║
 ║ Cloud                                                         ║
 ║   ✔ vault 1.18.3                                              ║
@@ -1845,7 +1843,7 @@ Component update logic with version tracking and logging:
 ```bash
 update_apt()       # apt update/upgrade with lock detection
 update_bun()       # bun upgrade with version tracking
-update_agents()    # Claude, Codex, Gemini (version before/after)
+update_agents()    # Claude, Codex, Antigravity (version before/after)
 update_cloud()     # Wrangler, Supabase, Vercel (Supabase uses verified release tarball)
 update_rust()      # rustup update stable
 update_uv()        # uv self update
@@ -1971,7 +1969,7 @@ interface SessionExport {
   schema_version: 1;
   exported_at: string;              // ISO8601
   session_id: string;
-  agent: "claude-code" | "codex" | "gemini";
+  agent: "claude-code" | "codex" | "agy";
   model: string;
   summary: string;
   duration_minutes: number;
@@ -3226,7 +3224,7 @@ scripts/generated/
 ├── install_network.sh     # Tailscale
 ├── install_lang.sh        # bun, uv, rust, go
 ├── install_tools.sh       # ast-grep, atuin, zoxide
-├── install_agents.sh      # claude, codex, gemini
+├── install_agents.sh      # claude, codex, agy
 ├── install_db.sh          # PostgreSQL 18, Vault
 ├── install_cloud.sh       # wrangler, supabase, vercel
 ├── install_stack.sh       # Dicklesworthstone 10-tool stack + utilities
@@ -4168,13 +4166,13 @@ codex --version
 codex  # Follow first-run sign-in prompts
 ```
 
-**Gemini CLI**:
+**Antigravity CLI**:
 ```bash
 # Check auth status
-gemini --version
+agy --version
 
 # Re-authenticate
-gemini  # Follow Google login flow, or use /auth inside Gemini CLI
+agy  # Follow Google login flow
 ```
 
 ### "Command Not Found" After Install

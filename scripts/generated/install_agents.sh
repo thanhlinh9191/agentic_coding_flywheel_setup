@@ -772,7 +772,7 @@ INSTALL_AGENTS_CODEX
     log_success "agents.codex installed"
 }
 
-# Google Gemini CLI
+# Legacy Google Gemini CLI (retired; not installed by default)
 install_agents_gemini() {
     local module_id="agents.gemini"
     acfs_require_contract "module:${module_id}" || return 1
@@ -785,8 +785,13 @@ install_agents_gemini() {
 ~/.bun/bin/bun install -g --trust @google/gemini-cli@latest
 INSTALL_AGENTS_GEMINI
         then
-            log_error "agents.gemini: install command failed: ~/.bun/bin/bun install -g --trust @google/gemini-cli@latest"
-            return 1
+            log_warn "agents.gemini: install command failed: ~/.bun/bin/bun install -g --trust @google/gemini-cli@latest"
+            if type -t record_skipped_tool >/dev/null 2>&1; then
+              record_skipped_tool "agents.gemini" "install command failed: ~/.bun/bin/bun install -g --trust @google/gemini-cli@latest"
+            elif type -t state_tool_skip >/dev/null 2>&1; then
+              state_tool_skip "agents.gemini"
+            fi
+            return 0
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -963,8 +968,13 @@ chmod 0755 "$wrapper_tmp"
 acfs_install_executable_into_primary_bin "$wrapper_tmp" "gemini"
 INSTALL_AGENTS_GEMINI
         then
-            log_error "agents.gemini: install command failed: trap 'rm -f \"\$wrapper_tmp\"' EXIT"
-            return 1
+            log_warn "agents.gemini: install command failed: trap 'rm -f \"\$wrapper_tmp\"' EXIT"
+            if type -t record_skipped_tool >/dev/null 2>&1; then
+              record_skipped_tool "agents.gemini" "install command failed: trap 'rm -f \"\$wrapper_tmp\"' EXIT"
+            elif type -t state_tool_skip >/dev/null 2>&1; then
+              state_tool_skip "agents.gemini"
+            fi
+            return 0
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1039,8 +1049,13 @@ if ! verify_checksum "$patch_url" "$patch_sha256" "gemini_patch" | bash; then
 fi
 INSTALL_AGENTS_GEMINI
         then
-            log_error "agents.gemini: install command failed: if [[ ! -f \"\$security_lib\" ]]; then"
-            return 1
+            log_warn "agents.gemini: install command failed: if [[ ! -f \"\$security_lib\" ]]; then"
+            if type -t record_skipped_tool >/dev/null 2>&1; then
+              record_skipped_tool "agents.gemini" "install command failed: if [[ ! -f \"\$security_lib\" ]]; then"
+            elif type -t state_tool_skip >/dev/null 2>&1; then
+              state_tool_skip "agents.gemini"
+            fi
+            return 0
         fi
     fi
 
@@ -1053,8 +1068,13 @@ target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"
 "$target_bin/gemini" --version || "$target_bin/gemini" --help
 INSTALL_AGENTS_GEMINI
         then
-            log_error "agents.gemini: verify failed: \"\$target_bin/gemini\" --version || \"\$target_bin/gemini\" --help"
-            return 1
+            log_warn "agents.gemini: verify failed: \"\$target_bin/gemini\" --version || \"\$target_bin/gemini\" --help"
+            if type -t record_skipped_tool >/dev/null 2>&1; then
+              record_skipped_tool "agents.gemini" "verify failed: \"\$target_bin/gemini\" --version || \"\$target_bin/gemini\" --help"
+            elif type -t state_tool_skip >/dev/null 2>&1; then
+              state_tool_skip "agents.gemini"
+            fi
+            return 0
         fi
     fi
 

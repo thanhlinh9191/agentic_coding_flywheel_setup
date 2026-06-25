@@ -333,7 +333,7 @@ printf '%s\n' "" \
   "    0:welcome  - This instructions window" \
   "    1:claude   - Claude Code (Anthropic)" \
   "    2:codex    - Codex CLI (OpenAI)" \
-  "    3:gemini   - Gemini CLI (Google)" \
+  "    3:agy      - Antigravity CLI (Google)" \
   "" \
   "  TMUX BASICS:" \
   "    Ctrl-b d        - Detach (keep session running)" \
@@ -344,7 +344,7 @@ printf '%s\n' "" \
   "  START AN AGENT:" \
   "    claude          - Start Claude Code" \
   "    codex           - Start Codex CLI" \
-  "    gemini          - Start Gemini CLI" \
+  "    agy             - Start Antigravity CLI" \
   "" \
   "  PROJECT: /data/projects/my_first_project" \
   "  (Rename with: mv /data/projects/my_first_project /data/projects/NEW_NAME)" \
@@ -373,7 +373,7 @@ if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
   # Add agent windows
   tmux new-window -t "$SESSION_NAME" -n "claude" -c /data/projects/my_first_project
   tmux new-window -t "$SESSION_NAME" -n "codex" -c /data/projects/my_first_project
-  tmux new-window -t "$SESSION_NAME" -n "gemini" -c /data/projects/my_first_project
+  tmux new-window -t "$SESSION_NAME" -n "agy" -c /data/projects/my_first_project
 
   # Send instructions to welcome window
   tmux send-keys -t "$SESSION_NAME:welcome" "cat ~/.acfs/workspace-instructions.txt" Enter

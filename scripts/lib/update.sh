@@ -895,7 +895,7 @@ get_version() {
                 version="unknown"
             fi
             ;;
-        claude|codex|gemini|wrangler|supabase|vercel)
+        claude|codex|agy|gemini|wrangler|supabase|vercel)
             tool_bin="$(update_binary_path "$tool" 2>/dev/null || true)"
             if [[ -n "$tool_bin" ]]; then
                 version=$("$tool_bin" --version 2>/dev/null | head -1 || echo "unknown")
@@ -1274,7 +1274,7 @@ _acfs_atuin_agent_context() {
 
     parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
     case "$parent_comm" in
-        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -2977,6 +2977,10 @@ sync_acfs_deployed() {
         "scripts/lib/doctor.sh:bin/acfs"
         "scripts/acfs-update:bin/acfs-update"
         "scripts/generate-root-agents-md.sh:bin/flywheel-update-agents-md"
+        "scripts/lib/agy_model_guard.sh:scripts/lib/agy_model_guard.sh"
+        "scripts/lib/agy_e2e_harness.sh:scripts/lib/agy_e2e_harness.sh"
+        "scripts/lib/agy_locked.py:scripts/lib/agy_locked.py"
+        "scripts/lib/agy_locked.py:bin/agy-locked"
         "scripts/services-setup.sh:scripts/services-setup.sh"
         "scripts/lib/info.sh:scripts/lib/info.sh"
         "scripts/lib/status.sh:scripts/lib/status.sh"
@@ -4983,6 +4987,42 @@ update_bun() {
     fi
 }
 
+update_install_agy_locked_launchers() {
+    local target_user=""
+    local target_home=""
+    local target_bin=""
+    local source_file=""
+
+    target_user="$(update_target_user)"
+    target_home="$(update_target_home "$target_user" 2>/dev/null || true)"
+    [[ -n "$target_home" ]] || return 1
+
+    target_bin="$(update_preferred_user_bin_dir 2>/dev/null || true)"
+    if [[ -z "$target_bin" ]]; then
+        target_bin="${ACFS_BIN_DIR:-$target_home/.local/bin}"
+    fi
+    target_bin="$(update_validate_bin_dir_for_home "$target_bin" "$target_home" 2>/dev/null || true)"
+    [[ -n "$target_bin" ]] || target_bin="$target_home/.local/bin"
+
+    for source_file in \
+        "$ACFS_REPO_ROOT/scripts/lib/agy_locked.py" \
+        "$target_home/.acfs/scripts/lib/agy_locked.py"; do
+        [[ -f "$source_file" ]] || continue
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_item "skip" "agy locked launchers" "dry-run"
+            return 0
+        fi
+        update_run_in_target_context "" mkdir -p "$target_bin" || return 1
+        update_run_in_target_context "" install -m 0755 "$source_file" "$target_bin/agy-locked" || return 1
+        update_run_in_target_context "" install -m 0755 "$source_file" "$target_bin/gmi" || return 1
+        log_item "fix" "agy locked launchers" "$target_bin/agy-locked, $target_bin/gmi"
+        return 0
+    done
+
+    log_item "warn" "agy locked launchers" "source asset not found"
+    return 1
+}
+
 update_agents() {
     if [[ "$UPDATE_AGENTS" != "true" ]]; then
         return 0
@@ -5076,14 +5116,15 @@ update_agents() {
     local bun_bin=""
     bun_bin="$(update_binary_path bun 2>/dev/null || true)"
     if [[ -z "$bun_bin" ]]; then
-        log_item "fail" "Bun not installed" "required for Codex/Gemini updates"
-        return 0
+        log_item "fail" "Bun not installed" "required for Codex updates"
     fi
 
     # Codex CLI via bun (--trust allows postinstall scripts)
     # Uses fallback chain: @latest -> unversioned -> pinned 0.87.0
     # npm can 404 briefly after publishing; pinned version is reliable fallback
-    if update_binary_exists codex || [[ "$FORCE_MODE" == "true" ]]; then
+    if [[ -z "$bun_bin" ]]; then
+        log_item "skip" "Codex CLI" "Bun not installed"
+    elif update_binary_exists codex || [[ "$FORCE_MODE" == "true" ]]; then
         local codex_fallback_version="0.87.0"
 
         capture_version_before "codex"
@@ -5129,46 +5170,31 @@ update_agents() {
         log_item "skip" "Codex CLI" "not installed (use --force to install)"
     fi
 
-    # Gemini CLI via bun (--trust allows postinstall scripts)
-    if update_binary_exists gemini || [[ "$FORCE_MODE" == "true" ]]; then
-        local gemini_patch_ready=true
-        local gemini_nvm_bin=""
-        local gemini_patch_skip_reason="Node.js runtime unavailable"
-        capture_version_before "gemini"
-        run_cmd_bun_with_retry "Gemini CLI" update_run_in_target_context "" "$bun_bin" install -g --trust @google/gemini-cli@latest
-        # Show version change without double-counting
-        if capture_version_after "gemini"; then
-            update_say "       ${DIM}%s → %s${NC}\n" "${VERSION_BEFORE[gemini]}" "${VERSION_AFTER[gemini]}"
+    # Antigravity CLI is a standalone native binary; keep the real binary updated
+    # and refresh the ACFS locked launchers (`agy-locked` and `gmi`).
+    if update_binary_exists agy; then
+        local agy_bin=""
+        agy_bin="$(update_binary_path agy 2>/dev/null || true)"
+        capture_version_before "agy"
+        run_cmd "Antigravity CLI" update_run_in_target_context "" "$agy_bin" update
+        if capture_version_after "agy"; then
+            update_say "       ${DIM}%s → %s${NC}\n" "${VERSION_BEFORE[agy]}" "${VERSION_AFTER[agy]}"
         fi
-        # Apply Gemini CLI patches (EBADF crash fix, rate-limit retry, quota retry)
-        if [[ "$DRY_RUN" == "true" ]]; then
-            log_item "skip" "Node.js runtime for Gemini patch" "dry-run: ensure nvm + latest Node.js when missing"
-            gemini_patch_ready=false
-            gemini_patch_skip_reason="dry-run: would apply after ensuring nvm + latest Node.js when needed"
-        elif update_has_nvm_node; then
-            log_item "info" "Node.js runtime for Gemini patch" "nvm + latest Node.js already present"
-        else
-            log_item "run" "Node.js runtime for Gemini patch"
-            if update_ensure_gemini_patch_node; then
-                log_item "fix" "Node.js runtime for Gemini patch" "installed nvm + latest Node.js"
-            else
-                log_item "warn" "Node.js runtime for Gemini patch" "failed to install nvm + latest Node.js; skipping Gemini patch"
-                gemini_patch_ready=false
-                gemini_patch_skip_reason="Node.js runtime unavailable"
+        update_install_agy_locked_launchers || true
+    elif [[ "$FORCE_MODE" == "true" ]]; then
+        capture_version_before "agy"
+        if update_require_security; then
+            run_cmd "Antigravity CLI (install)" update_run_verified_installer antigravity
+            if capture_version_after "agy"; then
+                update_say "       ${DIM}%s → %s${NC}\n" "${VERSION_BEFORE[agy]}" "${VERSION_AFTER[agy]}"
             fi
-        fi
-        if [[ "$gemini_patch_ready" == "true" ]] && ! gemini_nvm_bin="$(update_nvm_node_bin_dir)"; then
-            log_item "warn" "Node.js runtime for Gemini patch" "nvm Node.js bin not found; skipping Gemini patch"
-            gemini_patch_ready=false
-            gemini_patch_skip_reason="Node.js runtime unavailable"
-        fi
-        if [[ "$gemini_patch_ready" == "true" ]]; then
-            run_cmd "Gemini CLI patches" update_run_verified_installer_with_env gemini_patch "PATH=$gemini_nvm_bin:$PATH"
+            update_install_agy_locked_launchers || true
         else
-            log_item "skip" "Gemini CLI patches" "$gemini_patch_skip_reason"
+            log_item "fail" "Antigravity CLI" "not installed and install unavailable (missing security.sh/checksums.yaml)"
         fi
     else
-        log_item "skip" "Gemini CLI" "not installed (use --force to install)"
+        log_item "skip" "Antigravity CLI" "not installed (use --force to install)"
+        update_install_agy_locked_launchers || true
     fi
 }
 
@@ -6365,7 +6391,7 @@ USAGE:
 
 CATEGORY OPTIONS (select what to update):
   --apt-only         Only update system packages (apt)
-  --agents-only      Only update coding agents (Claude, Codex, Gemini)
+  --agents-only      Only update coding agents (Claude, Codex, Antigravity)
   --cloud-only       Only update cloud CLIs (Wrangler, Supabase, Vercel, gh, gcloud)
   --shell-only       Only update shell tools (OMZ, P10K, plugins, Atuin, Zoxide)
   --runtime-only     Only update runtimes (Bun, Rust, uv, Go)
@@ -6433,7 +6459,7 @@ WHAT EACH CATEGORY UPDATES:
             Atuin, Zoxide (reinstall from upstream)
   agents:   Claude Code (verified installer: curl claude.ai/install.sh | bash -- latest)
             Codex CLI (bun install -g --trust @openai/codex@latest)
-            Gemini CLI (bun install -g --trust @google/gemini-cli@latest)
+            Antigravity CLI (agy update; installs agy-locked and maps gmi to agy)
   cloud:    Wrangler, Vercel (bun install -g --trust <pkg>@latest)
             Supabase CLI (verified GitHub release tarball + sha256 checksums)
             GitHub CLI (gh extension upgrade --all)
@@ -6469,7 +6495,7 @@ TROUBLESHOOTING:
   - If an agent update fails: try running the update command directly:
     curl -fsSL https://claude.ai/install.sh | bash -s -- latest
     bun install -g --trust @openai/codex@latest
-    bun install -g --trust @google/gemini-cli@latest
+    agy update
 
   - If shell tools fail to update: check git remote access:
     git -C ~/.oh-my-zsh remote -v

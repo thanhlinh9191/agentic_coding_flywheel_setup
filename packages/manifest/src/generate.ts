@@ -2207,7 +2207,7 @@ const WEB_SELECTION_PROFILES = [
       'lang.uv',
       'agents.claude',
       'agents.codex',
-      'agents.gemini',
+      'agents.antigravity',
       'stack.ntm',
       'stack.mcp_agent_mail',
       'stack.ultimate_bug_scanner',

@@ -27,7 +27,7 @@ agy --version                                                 # -> 1.0.7
 | `brain/<uuid>/.system_generated/logs/transcript.jsonl` | ⭐ **Clean JSONL transcript of the conversation** — the recommended READ source (§3). Also `transcript_full.jsonl`. |
 | `brain/<uuid>/.system_generated/messages/*.json` | Per-message JSON. |
 | `brain/<uuid>/*.md` | Working docs (implementation_plan.md / task.md / walkthrough.md) — only for substantive conversations. |
-| `settings.json` | `{ "enableTelemetry": false, "model": "Gemini 3.1 Pro (High)" }` — the persisted default model + telemetry flag. |
+| `settings.json` | ACFS pins `enableTelemetry: false`, `model: "Gemini 3.1 Pro (High)"`, `toolPermission: "always-proceed"`, `artifactReviewPolicy: "always-proceed"`, native-terminal rendering, sandbox off, and the other `agy-locked` defaults before every launch. |
 | `cache/projects.json`, `cache/onboarding.json` | Workspace/onboarding metadata only (NOT history). |
 | `antigravity-oauth-token`, `installation_id`, `keybindings.json`, `builtin/`, `implicit/`, `log/cli-*.log` | Auth, ids, config, logs. |
 | `~/.gemini/config/mcp_config.json` | MCP server registration (empty by default; see §7). |
@@ -121,7 +121,7 @@ agy reads MCP servers from `~/.gemini/config/mcp_config.json` — **empty by def
 
 | gmi (legacy) | agy |
 |---|---|
-| `gmi` (interactive) | `agy` (interactive) |
+| `gmi` (interactive) | `agy-locked` (same forward path as `agy`) |
 | scripted prompt | `agy --print "<prompt>" --model "Gemini 3.1 Pro (High)"` |
 | history `~/.gemini/tmp/<hash>/chats/session-*.json` (JSON) | `~/.gemini/antigravity-cli/conversations/<uuid>.db` + `brain/<uuid>/…/transcript.jsonl` |
 | resume | `agy --continue` / `agy --conversation <uuid>` |

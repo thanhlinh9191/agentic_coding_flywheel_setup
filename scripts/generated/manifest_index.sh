@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="87d6c7762648da45c90b2bf7f8439a45b31b67d44905d09695d56165107b538c"
+ACFS_MANIFEST_SHA256="68ada50689c30f1a9212481f5a53da562d704ed881ad92658e68a41b52d421ec"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -214,7 +214,7 @@ declare -gA ACFS_MODULE_DEPS=(
   ['utils.rust_proxy']="lang.rust"
   ['utils.aadc']="lang.rust"
   ['utils.caut']="lang.rust"
-  ['acfs.workspace']="agents.claude,agents.codex,agents.gemini,cli.modern"
+  ['acfs.workspace']="agents.claude,agents.codex,agents.antigravity,cli.modern"
   ['acfs.onboard']=""
   ['acfs.update']=""
   ['acfs.nightly']="acfs.update"
@@ -384,7 +384,7 @@ declare -gA ACFS_MODULE_TAGS=(
   ['tools.ast_grep']="recommended"
   ['agents.claude']="recommended,agent"
   ['agents.codex']="recommended,agent"
-  ['agents.gemini']="recommended,agent"
+  ['agents.gemini']="legacy,agent"
   ['agents.antigravity']="recommended,agent"
   ['agents.opencode']="optional,agent"
   ['tools.vault']="optional,cloud"
@@ -455,7 +455,7 @@ declare -gA ACFS_MODULE_DEFAULT=(
   ['tools.ast_grep']="1"
   ['agents.claude']="1"
   ['agents.codex']="1"
-  ['agents.gemini']="1"
+  ['agents.gemini']="0"
   ['agents.antigravity']="1"
   ['agents.opencode']="0"
   ['tools.vault']="0"
@@ -526,7 +526,7 @@ declare -gA ACFS_MODULE_DESC=(
   ['tools.ast_grep']="ast-grep (used by UBS for syntax-aware scanning)"
   ['agents.claude']="Claude Code"
   ['agents.codex']="OpenAI Codex CLI"
-  ['agents.gemini']="Google Gemini CLI"
+  ['agents.gemini']="Legacy Google Gemini CLI (retired; not installed by default)"
   ['agents.antigravity']="Antigravity CLI (agy) — Google, successor to the retired Gemini CLI"
   ['agents.opencode']="OpenCode (multi-provider agent harness)"
   ['tools.vault']="HashiCorp Vault CLI"

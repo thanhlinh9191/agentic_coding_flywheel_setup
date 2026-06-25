@@ -459,9 +459,8 @@ install_tools_atuin() {
             return 1
         fi
     fi
-
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: install: real_bin=\"\$HOME/.atuin/bin/atuin\" (target_user)"
+        log_info "dry-run: install: if [[ \"\${1:-}\" == \"history\" && ( \"\${2:-}\" == \"start\" || \"\${2:-}\" == \"end\" ) ]] && _acfs_atuin_agent_context; then (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_TOOLS_ATUIN'
 real_bin="$HOME/.atuin/bin/atuin"
@@ -517,7 +516,7 @@ _acfs_atuin_agent_context() {
 
     parent_comm="$(ps -o comm= -p "${PPID:-0}" 2>/dev/null || true)"
     case "$parent_comm" in
-        claude|codex|cod|cc|gmi|gemini|bun|node) return 0 ;;
+        claude|codex|cod|cc|agy|antigravity|agy-locked|gmi|gemini|bun|node) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -543,7 +542,7 @@ for dir in "$primary_dir" "$fallback_dir"; do
 done
 INSTALL_TOOLS_ATUIN
         then
-            log_error "tools.atuin: install command failed: real_bin=\"\$HOME/.atuin/bin/atuin\""
+            log_error "tools.atuin: install command failed: if [[ \"\${1:-}\" == \"history\" && ( \"\${2:-}\" == \"start\" || \"\${2:-}\" == \"end\" ) ]] && _acfs_atuin_agent_context; then"
             return 1
         fi
     fi
