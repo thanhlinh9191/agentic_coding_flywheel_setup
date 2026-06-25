@@ -191,20 +191,20 @@ def command_parts(tokens):
 def env_invokes_dcg(tokens, depth):
     index = 0
     while index < len(tokens):
-        token = tokens[index]
-        if token == "--":
+        arg = tokens[index]
+        if arg in {"--"}:
             index += 1
             break
-        if is_assignment(token):
+        if is_assignment(arg):
             index += 1
             continue
-        if token in {"-i", "-0", "--ignore-environment", "--null"}:
+        if arg in {"-i", "-0", "--ignore-environment", "--null"}:
             index += 1
             continue
-        if token in {"-u", "--unset", "-C", "--chdir"}:
+        if arg in {"-u", "--unset", "-C", "--chdir"}:
             index += 2
             continue
-        if token in {"-S", "--split-string"}:
+        if arg in {"-S", "--split-string"}:
             if index + 1 >= len(tokens):
                 return False
             try:
@@ -212,19 +212,19 @@ def env_invokes_dcg(tokens, depth):
             except ValueError:
                 return False
             return tokens_invoke_dcg(split_tokens, depth)
-        if token.startswith("-u") and len(token) > 2:
+        if arg.startswith("-u") and len(arg) > 2:
             index += 1
             continue
-        if token.startswith("--split-string="):
+        if arg.startswith("--split-string="):
             try:
-                split_tokens = shlex.split(token.partition("=")[2])
+                split_tokens = shlex.split(arg.partition("=")[2])
             except ValueError:
                 return False
             return tokens_invoke_dcg(split_tokens, depth)
-        if token.startswith("--unset=") or token.startswith("--chdir="):
+        if arg.startswith("--unset=") or arg.startswith("--chdir="):
             index += 1
             continue
-        if token.startswith("-"):
+        if arg.startswith("-"):
             return False
         break
     return tokens_invoke_dcg(tokens[index:], depth) if index < len(tokens) else False
@@ -233,17 +233,17 @@ def env_invokes_dcg(tokens, depth):
 def shell_invokes_dcg(tokens, depth):
     index = 0
     while index < len(tokens):
-        token = tokens[index]
-        if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+        arg = tokens[index]
+        if arg.startswith("-") and "c" in arg[1:]:
             if index + 1 >= len(tokens):
                 return False
             try:
-                script_tokens = shlex.split(tokens[index + 1])
+                script_args = shlex.split(tokens[index + 1])
             except ValueError:
                 return False
-            if script_tokens and script_tokens[0] == "exec":
-                script_tokens = script_tokens[1:]
-            return tokens_invoke_dcg(script_tokens, depth)
+            if script_args and script_args[0] == "exec":
+                script_args = script_args[1:]
+            return tokens_invoke_dcg(script_args, depth)
         index += 1
     return False
 
@@ -265,8 +265,8 @@ def tokens_invoke_dcg(tokens, depth=0):
         return shell_invokes_dcg(remaining, depth + 1)
     if executable.startswith("python"):
         return any(
-            pathlib.Path(os.path.expanduser(token)).name == "dcg-antigravity-hook.py"
-            for token in remaining
+            pathlib.Path(os.path.expanduser(arg)).name == "dcg-antigravity-hook.py"
+            for arg in remaining
         )
     return False
 
@@ -376,21 +376,21 @@ def filtered_args(argv):
 
 
 def run_real_agy(args):
-    proc = subprocess.Popen(args)
-    previous_handlers = {}
-    for sig in (signal.SIGINT, signal.SIGQUIT):
-        previous_handlers[sig] = signal.getsignal(sig)
-        signal.signal(sig, signal.SIG_IGN)
-    try:
-        status = proc.wait()
-    finally:
-        for sig, handler in previous_handlers.items():
-            signal.signal(sig, handler)
+    with subprocess.Popen(args) as proc:
+        previous_handlers = {}
+        for sig in (signal.SIGINT, signal.SIGQUIT):
+            previous_handlers[sig] = signal.getsignal(sig)
+            signal.signal(sig, signal.SIG_IGN)
+        try:
+            status = proc.wait()
+        finally:
+            for sig, handler in previous_handlers.items():
+                signal.signal(sig, handler)
     return 128 - status if status < 0 else status
 
 
 def main():
-    if PRIME_SETTINGS_FLAG in sys.argv[1:]:
+    if sys.argv[1:] == [PRIME_SETTINGS_FLAG]:
         ensure_settings()
         ensure_dcg_hook()
         return 0

@@ -5116,7 +5116,11 @@ update_agents() {
     local bun_bin=""
     bun_bin="$(update_binary_path bun 2>/dev/null || true)"
     if [[ -z "$bun_bin" ]]; then
-        log_item "fail" "Bun not installed" "required for Codex updates"
+        if update_binary_exists codex || [[ "$FORCE_MODE" == "true" ]]; then
+            log_item "fail" "Bun not installed" "required for Codex updates"
+        else
+            log_item "skip" "Bun" "not installed; Codex CLI not installed"
+        fi
     fi
 
     # Codex CLI via bun (--trust allows postinstall scripts)

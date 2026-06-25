@@ -62,8 +62,12 @@ check "agy locked launcher installs dcg hook support" \
   "grep -q 'dcg-antigravity-hook.py' scripts/lib/agy_locked.py"
 check "agy locked launcher supports installer priming" \
   "grep -q -- '--acfs-prime-settings' scripts/lib/agy_locked.py"
+check "agy locked launcher only treats priming as an exact invocation" \
+  "grep -Fq 'sys.argv[1:] == [PRIME_SETTINGS_FLAG]' scripts/lib/agy_locked.py"
 check "agy locked launcher is valid Python" \
   "python3 -m py_compile scripts/lib/agy_locked.py"
+check "agents-only update does not fail on missing Bun when Codex is absent" \
+  "grep -q 'not installed; Codex CLI not installed' scripts/lib/update.sh"
 check "doctor checks for the agy alias" \
   "grep -q 'agent.alias.agy' scripts/lib/doctor.sh"
 
