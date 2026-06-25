@@ -1195,17 +1195,94 @@ install_agents_antigravity() {
             return 1
         fi
     fi
+    if [[ "${DRY_RUN:-false}" = "true" ]]; then
+        log_info "dry-run: install: install agy-locked launchers and prime settings (target_user)"
+    else
+        if ! run_as_target_shell <<'INSTALL_AGENTS_ANTIGRAVITY'
+# acfs-summary: install agy-locked launchers and prime settings
+target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"
+source_file=""
+for candidate in \
+  "${ACFS_LIB_DIR:-$HOME/.acfs/scripts/lib}/agy_locked.py" \
+  "$HOME/.acfs/scripts/lib/agy_locked.py"; do
+  if [[ -f "$candidate" ]]; then
+    source_file="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$source_file" ]]; then
+  echo "agents.antigravity: agy locked launcher asset not found" >&2
+  exit 1
+fi
+
+mkdir -p "$target_bin"
+install -m 0755 "$source_file" "$target_bin/agy-locked"
+install -m 0755 "$source_file" "$target_bin/gmi"
+
+if "$target_bin/agy-locked" --acfs-prime-settings; then
+  echo "agents.antigravity: agy locked settings and dcg hook primed" >&2
+else
+  echo "agents.antigravity: warning: settings will be primed on first agy launch" >&2
+fi
+INSTALL_AGENTS_ANTIGRAVITY
+        then
+            log_error "agents.antigravity: install command failed: install agy-locked launchers and prime settings"
+            return 1
+        fi
+    fi
 
     # Verify
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: verify: \"\$target_bin/agy\" --version || \"\$target_bin/agy\" --help (target_user)"
+        log_info "dry-run: verify: verify agy-locked launchers and pinned settings (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_AGENTS_ANTIGRAVITY'
+# acfs-summary: verify agy-locked launchers and pinned settings
 target_bin="${ACFS_BIN_DIR:-$HOME/.local/bin}"
-"$target_bin/agy" --version || "$target_bin/agy" --help
+test -x "$target_bin/agy"
+test -x "$target_bin/agy-locked"
+test -x "$target_bin/gmi"
+python3 - <<'PY'
+import json
+import pathlib
+import sys
+
+settings_path = pathlib.Path.home() / ".gemini" / "antigravity-cli" / "settings.json"
+hook_path = pathlib.Path.home() / ".gemini" / "config" / "hooks" / "dcg-antigravity-hook.py"
+try:
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"invalid or missing Antigravity settings: {settings_path}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+expected = {
+    "model": "Gemini 3.1 Pro (High)",
+    "toolPermission": "always-proceed",
+    "artifactReviewPolicy": "always-proceed",
+    "enableTelemetry": False,
+    "enableTerminalSandbox": False,
+    "allowNonWorkspaceAccess": True,
+    "notifications": False,
+    "showTips": False,
+    "showFeedbackSurvey": False,
+    "useG1Credits": False,
+    "verbosity": "high",
+    "runningLightSpeed": "medium",
+    "colorScheme": "terminal",
+    "editor": "auto",
+    "altScreenMode": "never",
+}
+for key, value in expected.items():
+    if settings.get(key) != value:
+        print(f"Antigravity setting {key} is {settings.get(key)!r}, expected {value!r}", file=sys.stderr)
+        raise SystemExit(1)
+if not hook_path.is_file():
+    print(f"Antigravity dcg hook is missing: {hook_path}", file=sys.stderr)
+    raise SystemExit(1)
+PY
 INSTALL_AGENTS_ANTIGRAVITY
         then
-            log_error "agents.antigravity: verify failed: \"\$target_bin/agy\" --version || \"\$target_bin/agy\" --help"
+            log_error "agents.antigravity: verify failed: verify agy-locked launchers and pinned settings"
             return 1
         fi
     fi

@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="0ea8f58cf9f79d6e8bc93b2b52ba90ca5f432105167d88fa70267bf7bfcf89ee"
+ACFS_MANIFEST_SHA256="54c33682d22748e67e2a0108fe196e2fa7020d362c36e4c1aa7c9420024ab4b6"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -597,7 +597,7 @@ declare -gA ACFS_MODULE_INSTALLED_CHECK=(
   ['agents.claude']="test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/claude\" || test -x \"\$HOME/.local/bin/claude\""
   ['agents.codex']="test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/codex\" || test -x \"\$HOME/.local/bin/codex\""
   ['agents.gemini']="test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/gemini\" || test -x \"\$HOME/.local/bin/gemini\""
-  ['agents.antigravity']="test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/agy\" || test -x \"\$HOME/.local/bin/agy\""
+  ['agents.antigravity']="target_bin=\"\${ACFS_BIN_DIR:-\$HOME/.local/bin}\"; test -x \"\$target_bin/agy\" && test -x \"\$target_bin/agy-locked\" && test -x \"\$target_bin/gmi\""
   ['agents.opencode']="command -v opencode"
   ['tools.vault']="command -v vault"
   ['db.postgres18']="command -v psql"

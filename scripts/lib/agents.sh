@@ -1263,7 +1263,14 @@ upgrade_antigravity_cli() {
     fi
 
     log_warn "Antigravity CLI self-update failed, attempting verified reinstall..."
-    install_antigravity_cli
+    if _agent_run_verified_upstream_installer "antigravity" "bash"; then
+        _configure_antigravity_settings "$target_home" || true
+        log_success "Antigravity CLI upgraded via verified installer"
+        return 0
+    fi
+
+    log_warn "Antigravity CLI upgrade failed"
+    return 1
 }
 
 # ============================================================

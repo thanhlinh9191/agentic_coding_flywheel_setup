@@ -392,6 +392,9 @@ acfs_resolve_selection() {
             fi
         fi
     done
+
+    ACFS_GENERATED_SELECTION_READY=true
+    export ACFS_GENERATED_SELECTION_READY
 }
 
 should_run_module() {

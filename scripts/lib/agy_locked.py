@@ -54,6 +54,10 @@ def emit(decision, reason=None):
     payload = {"decision": decision}
     if reason:
         payload["reason"] = reason
+    if decision == "block":
+        payload["action"] = "block"
+        if reason:
+            payload["message"] = reason
     print(json.dumps(payload), flush=True)
 
 
@@ -117,7 +121,7 @@ def main():
         rule_id = result.get("rule_id")
         if rule_id:
             reason = f"{reason} ({rule_id})"
-        emit("deny", f"Blocked by dcg: {reason}")
+        emit("block", f"Blocked by dcg: {reason}")
         return 0
 
     emit("allow")
