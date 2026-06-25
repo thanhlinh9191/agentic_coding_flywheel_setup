@@ -412,7 +412,7 @@ function collapsePacketText(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function looksSensitivePacketText(value: string): boolean {
+function hasSensitivePacketMarker(value: string): boolean {
   if (/-----begin [a-z ]*private key-----/i.test(value)) return true;
   if (/^[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^@\s]+@/i.test(value)) return true;
   if (/\bbearer\s+\S+/i.test(value)) return true;
@@ -429,7 +429,11 @@ function looksSensitivePacketText(value: string): boolean {
   if (/(?:^|[^0-9])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?:[^0-9]|$)/.test(value)) {
     return true;
   }
+  return false;
+}
 
+function looksSensitivePacketText(value: string): boolean {
+  if (hasSensitivePacketMarker(value)) return true;
   const compact = value.replace(/[^A-Za-z0-9]/g, "");
   return compact.length >= 40 && /[A-Za-z]/.test(compact) && /[0-9]/.test(compact);
 }
@@ -459,6 +463,7 @@ function safePacketUbuntuVersion(value: string | null | undefined): string {
 function safeSshPublicKeyFingerprint(value: string | null | undefined): string | undefined {
   const collapsed = collapsePacketText(value ?? "");
   if (!collapsed || collapsed.length > 140) return undefined;
+  if (hasSensitivePacketMarker(collapsed)) return undefined;
   if (/^SHA256:[A-Za-z0-9+/=]{20,80}$/.test(collapsed)) return collapsed;
   if (/^MD5:(?:[A-Fa-f0-9]{2}:){15}[A-Fa-f0-9]{2}$/.test(collapsed)) return collapsed;
   return undefined;
@@ -467,6 +472,7 @@ function safeSshPublicKeyFingerprint(value: string | null | undefined): string |
 function safeSshPublicKeyMaterial(value: string | null | undefined): string | undefined {
   const collapsed = collapsePacketText(value ?? "");
   if (!collapsed || collapsed.length > 8192) return undefined;
+  if (hasSensitivePacketMarker(collapsed)) return undefined;
 
   const match = collapsed.match(
     /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\s+([A-Za-z0-9+/]+={0,3})(?:\s+(.+))?$/,
@@ -476,6 +482,41 @@ function safeSshPublicKeyMaterial(value: string | null | undefined): string | un
   const comment = match[3] ?? "";
   if (comment && looksSensitivePacketText(comment)) return undefined;
   return collapsed;
+}
+
+function safePacketStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  return strings.length > 0 ? strings : undefined;
+}
+
+function safePacketModuleSelection(value: ModuleSelectionInput | undefined): ModuleSelectionInput | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  const moduleSelection: ModuleSelectionInput = {};
+  if (typeof record.profile === "string" && record.profile.length > 0) {
+    moduleSelection.profile = record.profile as ModuleSelectionInput["profile"];
+  }
+
+  const onlyModules = safePacketStringArray(record.onlyModules);
+  if (onlyModules) moduleSelection.onlyModules = onlyModules;
+
+  const onlyPhases = safePacketStringArray(record.onlyPhases);
+  if (onlyPhases) moduleSelection.onlyPhases = onlyPhases;
+
+  const skipModules = safePacketStringArray(record.skipModules);
+  if (skipModules) moduleSelection.skipModules = skipModules;
+
+  const skipTags = safePacketStringArray(record.skipTags);
+  if (skipTags) moduleSelection.skipTags = skipTags;
+
+  const skipCategories = safePacketStringArray(record.skipCategories);
+  if (skipCategories) moduleSelection.skipCategories = skipCategories;
+
+  if (record.noDeps === true) moduleSelection.noDeps = true;
+
+  return Object.keys(moduleSelection).length > 0 ? moduleSelection : undefined;
 }
 
 function readinessCheckStatus(
@@ -582,11 +623,12 @@ export function buildProviderProvisioningPacket(
   const requiredSpecs = calculateRequiredSpecs(targetAgents, workload, true);
   const selectedPlan = evaluatedSelectedPlan(readiness.plan, input.workloadId, targetAgents);
   const sourceRef = normalizeGitRef(input.sourceRef) ?? "main";
+  const moduleSelection = safePacketModuleSelection(input.moduleSelection);
   const installCommand = buildInstallCommand(
     input.installMode,
     sourceRef === "main" ? null : sourceRef,
     targetUsername,
-    input.moduleSelection,
+    moduleSelection,
   );
   const regionReadiness = readinessCheckStatus(readiness.checks, "region");
   const osReadiness = readinessCheckStatus(readiness.checks, "os");
@@ -661,7 +703,7 @@ export function buildProviderProvisioningPacket(
       sourceRef,
       command: installCommand,
       commandRunLocation: preset.cloudInitMode === "none" ? "vps-root-shell" : "cloud-init",
-      moduleSelection: input.moduleSelection,
+      moduleSelection,
     },
     compatibility: {
       workloadId: input.workloadId,

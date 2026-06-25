@@ -11,6 +11,7 @@ import {
   PROVIDER_PROVISIONING_PACKET_SCHEMA_VERSION,
   manualStepsForProvider,
   serializeProviderProvisioningPacketJson,
+  type ProviderProvisioningPacketInput,
 } from "./providerProvisioningPacket";
 import { VPS_PROVIDERS } from "./vpsProviders";
 
@@ -293,8 +294,8 @@ describe("buildProviderProvisioningPacket", () => {
     const packet = buildProviderProvisioningPacket({
       ...baseInput,
       sshPublicKeyLabel: "password=hunter2",
-      sshPublicKeyFingerprint: "SHA256:fixture token=abc",
-      sshPublicKeyMaterial: "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
+      sshPublicKeyFingerprint: "SHA256:AKIAABCDEFGHIJKLMNOP",
+      sshPublicKeyMaterial: "ssh-ed25519 AKIAABCDEFGHIJKLMNOP acfs",
     });
     const json = serializeProviderProvisioningPacketJson(packet);
 
@@ -303,7 +304,18 @@ describe("buildProviderProvisioningPacket", () => {
     expect(packet.access.sshPublicKeyMaterial).toBeUndefined();
     expect(packet.access.sshPrivateKeyIncluded).toBe(false);
     expect(json).not.toContain("hunter2");
-    expect(json).not.toContain("token=abc");
+    expect(json).not.toContain("AKIAABCDEFGHIJKLMNOP");
+  });
+
+  test("omits private-key material pasted into the public-key field", () => {
+    const packet = buildProviderProvisioningPacket({
+      ...baseInput,
+      sshPublicKeyMaterial: "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
+    });
+    const json = serializeProviderProvisioningPacketJson(packet);
+
+    expect(packet.access.sshPublicKeyMaterial).toBeUndefined();
+    expect(packet.access.sshPrivateKeyIncluded).toBe(false);
     expect(json).not.toContain("BEGIN OPENSSH PRIVATE KEY");
   });
 
@@ -326,5 +338,24 @@ describe("buildProviderProvisioningPacket", () => {
     expect(packet.install.command).toContain('--only "cloud.wrangler"');
     expect(packet.install.command).toContain('--only "cloud.supabase"');
     expect(packet.install.command).toContain('--only "cloud.vercel"');
+  });
+
+  test("stores only known module selection fields in support-safe packets", () => {
+    const packet = buildProviderProvisioningPacket({
+      ...baseInput,
+      moduleSelection: {
+        profile: "cloud-only",
+        secretToken: "AKIAABCDEFGHIJKLMNOP",
+        onlyModules: "stack.dcg",
+        skipModules: [42, ""],
+        noDeps: "true",
+      } as unknown as ProviderProvisioningPacketInput["moduleSelection"],
+    });
+    const json = serializeProviderProvisioningPacketJson(packet);
+
+    expect(packet.install.moduleSelection).toEqual({ profile: "cloud-only" });
+    expect(json).not.toContain("secretToken");
+    expect(json).not.toContain("AKIAABCDEFGHIJKLMNOP");
+    expect(json).not.toContain("stack.dcg");
   });
 });
