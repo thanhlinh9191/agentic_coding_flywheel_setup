@@ -10563,7 +10563,7 @@ JSON
 test_onboard_auth_checks_find_target_binaries_outside_current_path() {
     setup_installed_layout_env
 
-    mkdir -p "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini" \
+    mkdir -p "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini/antigravity-cli" \
         "$TEST_TARGET_HOME/.config/gh" "$TEST_TARGET_HOME/.config/vercel" "$TEST_TARGET_HOME/.supabase"
 
     cat > "$TEST_TARGET_HOME/.codex/auth.json" <<'JSON'
@@ -10574,11 +10574,7 @@ test_onboard_auth_checks_find_target_binaries_outside_current_path() {
 }
 JSON
 
-    cat > "$TEST_TARGET_HOME/.gemini/google_accounts.json" <<'JSON'
-{
-  "active": "tester@example.com"
-}
-JSON
+    printf '%s\n' 'antigravity-token' > "$TEST_TARGET_HOME/.gemini/antigravity-cli/antigravity-oauth-token"
 
     cat > "$TEST_TARGET_HOME/.config/gh/hosts.yml" <<'EOF2'
 github.com:
@@ -10594,7 +10590,7 @@ JSON
 
     printf 'supabase-token\n' > "$TEST_TARGET_HOME/.supabase/access-token"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/codex" "codex 1.2.3"
-    write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/gh" "gh 2.60.0"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/vercel" "tester@example.com"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/wrangler" "tester@example.com"
@@ -10610,10 +10606,10 @@ EOF2
     chmod +x "$TEST_TARGET_HOME/.local/bin/tailscale"
 
     local output=""
-    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; for svc in codex gemini github vercel supabase cloudflare tailscale; do check_auth_status "$svc" && rc=0 || rc=$?; printf "%s\n" "$svc=$rc"; done')
+    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; for svc in codex antigravity github vercel supabase cloudflare tailscale; do check_auth_status "$svc" && rc=0 || rc=$?; printf "%s\n" "$svc=$rc"; done')
 
     if [[ "$output" == *$'codex=0\n'* ]] \
-        && [[ "$output" == *$'gemini=0\n'* ]] \
+        && [[ "$output" == *$'antigravity=0\n'* ]] \
         && [[ "$output" == *$'github=0\n'* ]] \
         && [[ "$output" == *$'vercel=0\n'* ]] \
         && [[ "$output" == *$'supabase=0\n'* ]] \
@@ -10630,7 +10626,7 @@ EOF2
 test_onboard_auth_checks_reject_placeholder_credentials() {
     setup_installed_layout_env
 
-    mkdir -p "$TEST_TARGET_HOME/.claude" "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini" \
+    mkdir -p "$TEST_TARGET_HOME/.claude" "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini/antigravity-cli" \
         "$TEST_TARGET_HOME/.config/vercel" "$TEST_TARGET_HOME/.supabase"
 
     cat > "$TEST_TARGET_HOME/.claude/.credentials.json" <<'JSON'
@@ -10650,19 +10646,7 @@ JSON
 }
 JSON
 
-    cat > "$TEST_TARGET_HOME/.gemini/google_accounts.json" <<'JSON'
-{
-  "active": "replace-me"
-}
-JSON
-    cat > "$TEST_TARGET_HOME/.gemini/oauth_creds.json" <<'JSON'
-{
-  "refresh_token": "your-token-here"
-}
-JSON
-    cat > "$TEST_TARGET_HOME/.gemini/.env" <<'EOF2'
-GEMINI_API_KEY="YOUR_GEMINI_API_KEY" # replace me
-EOF2
+    printf '%s\n' 'your-token-here' > "$TEST_TARGET_HOME/.gemini/antigravity-cli/antigravity-oauth-token"
 
     cat > "$TEST_TARGET_HOME/.config/vercel/auth.json" <<'JSON'
 {
@@ -10677,16 +10661,16 @@ JSON
 
     write_fake_command "$TEST_TARGET_HOME/.local/bin/claude" "claude 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/codex" "codex 1.2.3"
-    write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/vercel" "not logged in"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/supabase" "supabase 2.99.0"
 
     local output=""
-    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; for svc in claude codex gemini vercel supabase; do check_auth_status "$svc" && rc=0 || rc=$?; printf "%s\n" "$svc=$rc"; done')
+    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; for svc in claude codex antigravity vercel supabase; do check_auth_status "$svc" && rc=0 || rc=$?; printf "%s\n" "$svc=$rc"; done')
 
     if [[ "$output" == *$'claude=1\n'* ]] \
         && [[ "$output" == *$'codex=1\n'* ]] \
-        && [[ "$output" == *$'gemini=1\n'* ]] \
+        && [[ "$output" == *$'antigravity=1\n'* ]] \
         && [[ "$output" == *$'vercel=1\n'* ]] \
         && [[ "$output" == *"supabase=1"* ]]; then
         harness_pass "onboard auth checks reject placeholder credentials"
@@ -10837,68 +10821,48 @@ EOF
     cleanup_mock_env
 }
 
-test_onboard_gemini_vertex_auth_finds_target_google_cloud_sdk_bin_outside_current_path() {
+test_onboard_antigravity_auth_respects_antigravity_home_override() {
     setup_installed_layout_env
 
-    mkdir -p "$TEST_TARGET_HOME/.gemini" "$TEST_TARGET_HOME/google-cloud-sdk/bin"
-    cat > "$TEST_TARGET_HOME/.gemini/.env" <<'EOF'
-GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_PROJECT=test-project
-GOOGLE_CLOUD_LOCATION=us-central1
-EOF
+    local antigravity_home="$TEST_TARGET_HOME/custom-antigravity-home"
+    mkdir -p "$antigravity_home"
+    printf '%s\n' 'antigravity-token' > "$antigravity_home/antigravity-oauth-token"
 
-    write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
-    cat > "$TEST_TARGET_HOME/google-cloud-sdk/bin/gcloud" <<'EOF'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "auth" && "${2:-}" == "application-default" && "${3:-}" == "print-access-token" ]]; then
-    printf '%s\n' 'ya29.test-token'
-    exit 0
-fi
-exit 1
-EOF
-    chmod +x "$TEST_TARGET_HOME/google-cloud-sdk/bin/gcloud"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
 
     local output=""
-    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" \
-        bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; check_auth_status gemini && status=0 || status=$?; printf "%s\n" "$status"')
+    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" ANTIGRAVITY_HOME="$antigravity_home" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" \
+        bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; check_auth_status antigravity && status=0 || status=$?; printf "%s\n" "$status"')
 
     if [[ "$output" == "0" ]]; then
-        harness_pass "onboard gemini vertex auth finds target google-cloud-sdk bin outside current PATH"
+        harness_pass "onboard antigravity auth respects ANTIGRAVITY_HOME override"
     else
-        harness_fail "onboard gemini vertex auth finds target google-cloud-sdk bin outside current PATH" "$output"
+        harness_fail "onboard antigravity auth respects ANTIGRAVITY_HOME override" "$output"
     fi
 
     cleanup_mock_env
 }
 
-test_onboard_gemini_vertex_auth_finds_target_gcloud_outside_current_path() {
+test_onboard_antigravity_auth_rejects_legacy_gemini_credentials_without_agy() {
     setup_installed_layout_env
 
     mkdir -p "$TEST_TARGET_HOME/.gemini"
-    cat > "$TEST_TARGET_HOME/.gemini/.env" <<'EOF2'
-GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_PROJECT=test-project
-GOOGLE_CLOUD_LOCATION=us-central1
-EOF2
+    cat > "$TEST_TARGET_HOME/.gemini/google_accounts.json" <<'JSON'
+{
+  "active": "tester@example.com"
+}
+JSON
 
     write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
-    cat > "$TEST_TARGET_HOME/.local/bin/gcloud" <<'EOF2'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "auth" && "${2:-}" == "application-default" && "${3:-}" == "print-access-token" ]]; then
-    printf '%s\n' 'ya29.test-token'
-    exit 0
-fi
-exit 1
-EOF2
-    chmod +x "$TEST_TARGET_HOME/.local/bin/gcloud"
 
     local output=""
-    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; check_auth_status gemini && status=0 || status=$?; printf "%s\n" "$status"')
+    output=$(HOME="$TEST_ROOT_HOME" ACFS_HOME="$TEST_INSTALLED_ACFS" PATH="$TEST_FAKE_BIN:/usr/bin:/bin" \
+        bash -lc 'source "'"$ONBOARD_SH"'" help >/dev/null; check_auth_status antigravity && status=0 || status=$?; printf "%s\n" "$status"')
 
-    if [[ "$output" == "0" ]]; then
-        harness_pass "onboard gemini vertex auth finds target gcloud outside current PATH"
+    if [[ "$output" == "2" ]]; then
+        harness_pass "onboard antigravity auth rejects legacy Gemini credentials without agy"
     else
-        harness_fail "onboard gemini vertex auth finds target gcloud outside current PATH" "$output"
+        harness_fail "onboard antigravity auth rejects legacy Gemini credentials without agy" "$output"
     fi
 
     cleanup_mock_env

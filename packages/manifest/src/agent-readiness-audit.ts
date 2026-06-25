@@ -120,6 +120,7 @@ interface AuthFileCandidate {
   label: string;
   path: string;
   json: boolean;
+  validateJson?: (value: unknown) => string | null;
 }
 
 interface ProviderDefinition {
@@ -171,6 +172,16 @@ const STATUS_RANK: Record<ReadinessStatus, number> = {
 };
 const AGENT_PROVIDERS = ['claude', 'codex', 'agy'] as const;
 
+function directoryEntryKind(entry: { isDirectory(): boolean; isFile(): boolean }): DirectoryEntryResult['kind'] {
+  if (entry.isDirectory()) {
+    return 'directory';
+  }
+  if (entry.isFile()) {
+    return 'file';
+  }
+  return 'other';
+}
+
 class NodeReadinessFileSystem implements AgentReadinessFileSystem {
   stat(path: string): PathStatResult {
     try {
@@ -212,7 +223,7 @@ class NodeReadinessFileSystem implements AgentReadinessFileSystem {
     try {
       const entries = readdirSync(path, { withFileTypes: true }).map((entry) => ({
         name: entry.name,
-        kind: entry.isDirectory() ? 'directory' as const : entry.isFile() ? 'file' as const : 'other' as const,
+        kind: directoryEntryKind(entry),
       }));
       return { kind: 'ok', entries };
     } catch (error) {
@@ -302,6 +313,42 @@ function credentialEnvPresent(env: Record<string, string | undefined>, names: st
   return names.filter((name) => Boolean(env[name]?.trim()));
 }
 
+const ANTIGRAVITY_EXPECTED_SETTINGS: Record<string, string | boolean> = {
+  model: 'Gemini 3.1 Pro (High)',
+  toolPermission: 'always-proceed',
+  artifactReviewPolicy: 'always-proceed',
+  enableTelemetry: false,
+  enableTerminalSandbox: false,
+  allowNonWorkspaceAccess: true,
+  notifications: false,
+  showTips: false,
+  showFeedbackSurvey: false,
+  useG1Credits: false,
+  verbosity: 'high',
+  runningLightSpeed: 'medium',
+  colorScheme: 'terminal',
+  editor: 'auto',
+  altScreenMode: 'never',
+};
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateAntigravitySettings(value: unknown): string | null {
+  if (!isJsonObject(value)) {
+    return 'settings root must be a JSON object';
+  }
+
+  for (const [key, expected] of Object.entries(ANTIGRAVITY_EXPECTED_SETTINGS)) {
+    if (value[key] !== expected) {
+      return `missing ACFS-pinned ${key}=${JSON.stringify(expected)}`;
+    }
+  }
+
+  return null;
+}
+
 function providerDefinitions(): ProviderDefinition[] {
   return [
     {
@@ -374,11 +421,17 @@ function providerDefinitions(): ProviderDefinition[] {
           ? resolve(context.env.ANTIGRAVITY_HOME)
           : join(context.home, '.gemini', 'antigravity-cli');
         return [
-          { label: 'Antigravity settings', path: join(antigravityHome, 'settings.json'), json: true },
+          {
+            label: 'Antigravity settings',
+            path: join(antigravityHome, 'settings.json'),
+            json: true,
+            validateJson: validateAntigravitySettings,
+          },
         ];
       },
       envCredentials: [],
       nextActions: [
+        'Run `agy-locked --acfs-prime-settings` to restore ACFS-pinned settings and the DCG hook.',
         'Run `agy` and complete Google authentication.',
         'Use the Google account tied to eligible Gemini access for Antigravity.',
       ],
@@ -503,13 +556,23 @@ function parseJsonProbe(candidate: AuthFileCandidate, fs: AgentReadinessFileSyst
     };
   }
   if (candidate.json) {
+    let parsed: unknown;
     try {
-      JSON.parse(read.content ?? '');
+      parsed = JSON.parse(read.content ?? '');
     } catch (error) {
       return {
         status: 'fail',
         path: candidate.path,
         detail: `${candidate.label} is malformed JSON at ${redactPath(candidate.path, home)}: ${errorMessage(error)}`,
+        exists: true,
+      };
+    }
+    const validationError = candidate.validateJson?.(parsed);
+    if (validationError) {
+      return {
+        status: 'fail',
+        path: candidate.path,
+        detail: `${candidate.label} failed validation at ${redactPath(candidate.path, home)}: ${validationError}`,
         exists: true,
       };
     }

@@ -26,6 +26,24 @@ const REDACTION_SAMPLE = ['opaque', 'credential', 'sample'].join('-');
 const PROVIDERS = ['claude', 'codex', 'agy'] as const;
 const AUDIT_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'agent-readiness-audit.ts');
 
+function fixtureChildKind(
+  entryPath: string,
+  directPath: string,
+  directEntry: FixtureEntry | undefined,
+  child: FixtureEntry
+): DirectoryEntryResult['kind'] {
+  if (directEntry?.kind === 'file') {
+    return 'file';
+  }
+  if (directEntry?.kind === 'directory' || entryPath !== directPath) {
+    return 'directory';
+  }
+  if (child.kind === 'file') {
+    return 'file';
+  }
+  return 'directory';
+}
+
 class FixtureFileSystem implements AgentReadinessFileSystem {
   private readonly entries: Map<string, FixtureEntry>;
 
@@ -82,13 +100,7 @@ class FixtureFileSystem implements AgentReadinessFileSystem {
       if (!name) continue;
       const directPath = `${prefix}${name}`;
       const directEntry = this.entries.get(directPath);
-      const kind = directEntry?.kind === 'file'
-        ? 'file'
-        : directEntry?.kind === 'directory' || entryPath !== directPath
-          ? 'directory'
-          : child.kind === 'file'
-            ? 'file'
-            : 'directory';
+      const kind = fixtureChildKind(entryPath, directPath, directEntry, child);
       children.set(name, { name, kind });
     }
 
@@ -130,6 +142,27 @@ function textFile(value: string): FixtureEntry {
   return { kind: 'file', content: value };
 }
 
+function antigravitySettings(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    model: 'Gemini 3.1 Pro (High)',
+    toolPermission: 'always-proceed',
+    artifactReviewPolicy: 'always-proceed',
+    enableTelemetry: false,
+    enableTerminalSandbox: false,
+    allowNonWorkspaceAccess: true,
+    notifications: false,
+    showTips: false,
+    showFeedbackSurvey: false,
+    useG1Credits: false,
+    verbosity: 'high',
+    runningLightSpeed: 'medium',
+    colorScheme: 'terminal',
+    editor: 'auto',
+    altScreenMode: 'never',
+    ...overrides,
+  };
+}
+
 function profile(provider: string, name: string): Record<string, FixtureEntry> {
   return {
     [`${HOME}/.local/share/caam/profiles/${provider}/${name}/profile.json`]: jsonFile({
@@ -148,7 +181,7 @@ function baseEntries(): Record<string, FixtureEntry> {
     '/bin/caam': executable('/bin/caam'),
     [`${HOME}/.claude/.credentials.json`]: jsonFile({ claudeAiOauth: { accessToken: REDACTION_SAMPLE } }),
     [`${HOME}/.codex/auth.json`]: jsonFile({ tokens: { access_token: REDACTION_SAMPLE } }),
-    [`${HOME}/.gemini/antigravity-cli/settings.json`]: jsonFile({ defaultModel: 'Gemini 3.1 Pro (High)' }),
+    [`${HOME}/.gemini/antigravity-cli/settings.json`]: jsonFile(antigravitySettings()),
     [`${HOME}/.gemini/antigravity-cli/antigravity-oauth-token`]: textFile(REDACTION_SAMPLE),
     [`${HOME}/.config/caam/config.json`]: jsonFile({
       default_profiles: {
@@ -204,7 +237,7 @@ function createCliFixture() {
     tokens: { access_token: secret },
   }));
   writeRealFile(join(home, '.gemini', 'antigravity-cli', 'settings.json'), JSON.stringify({
-    defaultModel: 'Gemini 3.1 Pro (High)',
+    ...antigravitySettings(),
   }));
   writeRealFile(join(home, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'), secret);
   writeRealFile(join(home, '.config', 'caam', 'config.json'), JSON.stringify({
@@ -331,6 +364,22 @@ describe('agent readiness audit', () => {
     expect(report.ok).toBe(false);
     expect(codex?.status).toBe('fail');
     expect(codex?.auth?.detail).toContain('malformed JSON');
+  });
+
+  test('fails Antigravity config when policy settings are not pinned', () => {
+    const entries = baseEntries();
+    entries[`${HOME}/.gemini/antigravity-cli/settings.json`] = jsonFile(
+      antigravitySettings({ model: 'Gemini 2.5 Pro' })
+    );
+
+    const report = reportFor(entries);
+    const antigravity = report.tools.find((item) => item.id === 'agy');
+
+    expect(report.ok).toBe(false);
+    expect(antigravity?.status).toBe('fail');
+    expect(antigravity?.config?.detail).toContain('model');
+    expect(antigravity?.nextActions.join('\n')).toContain('--acfs-prime-settings');
+    expect(JSON.stringify(report)).not.toContain(REDACTION_SAMPLE);
   });
 
   test('fails when an agent CLI is missing', () => {
