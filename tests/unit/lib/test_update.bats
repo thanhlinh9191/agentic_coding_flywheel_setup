@@ -2848,6 +2848,40 @@ EOF
     assert_success
 }
 
+@test "Atuin manifest metadata requires guarded shim" {
+    local manifest="$PROJECT_ROOT/acfs.manifest.yaml"
+    local manifest_index="$PROJECT_ROOT/scripts/generated/manifest_index.sh"
+    local install_tools="$PROJECT_ROOT/scripts/generated/install_tools.sh"
+    local web_manifest="$PROJECT_ROOT/apps/web/lib/generated/manifest-modules.ts"
+
+    run grep -F 'description: Atuin CLI with guarded agent-safe shim' "$manifest"
+    assert_success
+
+    run grep -F 'command: "test -x ~/.atuin/bin/atuin && test -x \"${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin\"' "$manifest"
+    assert_success
+
+    run grep -F 'grep -Fq \"agent hook integration disabled by ACFS\" \"${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin\"' "$manifest"
+    assert_success
+
+    run grep -F '# acfs-summary: install Atuin guard wrapper' "$manifest"
+    assert_success
+
+    run grep -F "['tools.atuin']=\"Atuin CLI with guarded agent-safe shim\"" "$manifest_index"
+    assert_success
+
+    run grep -F "agent hook integration disabled by ACFS" "$manifest_index"
+    assert_success
+
+    run grep -F 'dry-run: install: install Atuin guard wrapper' "$install_tools"
+    assert_success
+
+    run grep -F 'description: "Atuin CLI with guarded agent-safe shim"' "$web_manifest"
+    assert_success
+
+    run grep -F 'Atuin shell history (Ctrl-R superpowers)' "$manifest" "$manifest_index" "$web_manifest"
+    assert_failure
+}
+
 @test "sync_acfs_zsh_loader: removes duplicate local override sourcing" {
     cat > "$HOME/.zshrc" <<'EOF'
 # ACFS loader

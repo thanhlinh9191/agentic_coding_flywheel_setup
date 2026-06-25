@@ -6,7 +6,7 @@
 # ============================================================
 # Data-only manifest index. Safe to source.
 
-ACFS_MANIFEST_SHA256="68ada50689c30f1a9212481f5a53da562d704ed881ad92658e68a41b52d421ec"
+ACFS_MANIFEST_SHA256="0ea8f58cf9f79d6e8bc93b2b52ba90ca5f432105167d88fa70267bf7bfcf89ee"
 
 ACFS_MODULES_IN_ORDER=(
   "base.system"
@@ -521,7 +521,7 @@ declare -gA ACFS_MODULE_DESC=(
   ['lang.rust']="Rust nightly + cargo"
   ['lang.go']="Go toolchain"
   ['lang.nvm']="nvm + latest Node.js"
-  ['tools.atuin']="Atuin shell history (Ctrl-R superpowers)"
+  ['tools.atuin']="Atuin CLI with guarded agent-safe shim"
   ['tools.zoxide']="Zoxide (better cd)"
   ['tools.ast_grep']="ast-grep (used by UBS for syntax-aware scanning)"
   ['agents.claude']="Claude Code"
@@ -591,7 +591,7 @@ declare -gA ACFS_MODULE_INSTALLED_CHECK=(
   ['lang.rust']="test -x ~/.cargo/bin/cargo"
   ['lang.go']="command -v go"
   ['lang.nvm']="test -d ~/.nvm && ls ~/.nvm/versions/node/ 2>/dev/null | grep -q ."
-  ['tools.atuin']="test -x ~/.atuin/bin/atuin"
+  ['tools.atuin']="test -x ~/.atuin/bin/atuin && test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/atuin\" && grep -Fq \"agent hook integration disabled by ACFS\" \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/atuin\""
   ['tools.zoxide']="command -v zoxide"
   ['tools.ast_grep']="command -v sg"
   ['agents.claude']="test -x \"\${ACFS_BIN_DIR:-\$HOME/.local/bin}/claude\" || test -x \"\$HOME/.local/bin/claude\""

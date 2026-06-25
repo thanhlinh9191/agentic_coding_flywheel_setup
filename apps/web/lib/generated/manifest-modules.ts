@@ -32,7 +32,7 @@ export interface ManifestProvenanceMetadata {
 
 export const manifestProvenance = {
   acfsVersion: "0.7.0",
-  manifestSha256: "68ada50689c30f1a9212481f5a53da562d704ed881ad92658e68a41b52d421ec",
+  manifestSha256: "0ea8f58cf9f79d6e8bc93b2b52ba90ca5f432105167d88fa70267bf7bfcf89ee",
   checksumsYamlSha256: "3c3f1fb130915218c4d1f3b567775986e7640a1daeb9ce8263485c9d546abc04",
 } as const satisfies ManifestProvenanceMetadata;
 
@@ -262,7 +262,7 @@ export const manifestModules: ManifestModuleMetadata[] = [
   },
   {
     id: "tools.atuin",
-    description: "Atuin shell history (Ctrl-R superpowers)",
+    description: "Atuin CLI with guarded agent-safe shim",
     category: "tools",
     phase: 6,
     dependencies: [

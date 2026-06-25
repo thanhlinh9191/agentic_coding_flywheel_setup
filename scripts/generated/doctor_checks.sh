@@ -330,7 +330,7 @@ declare -a MANIFEST_CHECKS=(
     "lang.rust.2	Rust nightly + cargo	~/.cargo/bin/rustup show | grep -q nightly	required	target_user"
     "lang.go	Go toolchain	go version	required	root"
     "lang.nvm	nvm + latest Node.js	export NVM_DIR=\"\$HOME/.nvm\"\\n[ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"\\nnode --version	required	target_user"
-    "tools.atuin	Atuin shell history (Ctrl-R superpowers)	~/.atuin/bin/atuin --version	required	target_user"
+    "tools.atuin	Atuin CLI with guarded agent-safe shim	~/.atuin/bin/atuin --version	required	target_user"
     "tools.zoxide	Zoxide (better cd)	command -v zoxide	required	target_user"
     "tools.ast_grep	ast-grep (used by UBS for syntax-aware scanning)	sg --version	required	target_user"
     "agents.claude	Claude Code	target_bin=\"\${ACFS_BIN_DIR:-\$HOME/.local/bin}\"\\n\"\$target_bin/claude\" --version || \"\$target_bin/claude\" --help	required	target_user"

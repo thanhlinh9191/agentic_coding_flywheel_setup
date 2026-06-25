@@ -397,7 +397,7 @@ INSTALL_TOOLS_LAZYDOCKER
     log_success "tools.lazydocker installed"
 }
 
-# Atuin shell history (Ctrl-R superpowers)
+# Atuin CLI with guarded agent-safe shim
 install_tools_atuin() {
     local module_id="tools.atuin"
     acfs_require_contract "module:${module_id}" || return 1
@@ -460,9 +460,10 @@ install_tools_atuin() {
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: install: if [[ \"\${1:-}\" == \"history\" && ( \"\${2:-}\" == \"start\" || \"\${2:-}\" == \"end\" ) ]] && _acfs_atuin_agent_context; then (target_user)"
+        log_info "dry-run: install: install Atuin guard wrapper (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_TOOLS_ATUIN'
+# acfs-summary: install Atuin guard wrapper
 real_bin="$HOME/.atuin/bin/atuin"
 primary_dir="${ACFS_BIN_DIR:-$HOME/.local/bin}"
 fallback_dir="$HOME/.local/bin"
@@ -542,7 +543,7 @@ for dir in "$primary_dir" "$fallback_dir"; do
 done
 INSTALL_TOOLS_ATUIN
         then
-            log_error "tools.atuin: install command failed: if [[ \"\${1:-}\" == \"history\" && ( \"\${2:-}\" == \"start\" || \"\${2:-}\" == \"end\" ) ]] && _acfs_atuin_agent_context; then"
+            log_error "tools.atuin: install command failed: install Atuin guard wrapper"
             return 1
         fi
     fi

@@ -730,7 +730,7 @@ modules:
         node --version
 
   - id: tools.atuin
-    description: Atuin shell history (Ctrl-R superpowers)
+    description: Atuin CLI with guarded agent-safe shim
     category: tools
     phase: 6
     run_as: target_user
@@ -741,13 +741,14 @@ modules:
       - base.system
     installed_check:
       run_as: target_user
-      command: "test -x ~/.atuin/bin/atuin"
+      command: "test -x ~/.atuin/bin/atuin && test -x \"${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin\" && grep -Fq \"agent hook integration disabled by ACFS\" \"${ACFS_BIN_DIR:-$HOME/.local/bin}/atuin\""
     verified_installer:
       tool: atuin
       runner: sh
       args: ["--", "--non-interactive"]
     install:
       - |
+          # acfs-summary: install Atuin guard wrapper
           real_bin="$HOME/.atuin/bin/atuin"
           primary_dir="${ACFS_BIN_DIR:-$HOME/.local/bin}"
           fallback_dir="$HOME/.local/bin"

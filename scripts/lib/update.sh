@@ -1317,6 +1317,13 @@ update_repair_atuin_install() {
         for dir in "${bin_dirs[@]}"; do
             [[ -n "$dir" ]] || continue
             mkdir -p "$dir" 2>/dev/null || true
+            if [[ "${EUID:-$(id -u)}" -eq 0 && -n "$target_home" && "$dir" == "$target_home/"* ]]; then
+                local chown_dir="$dir"
+                while [[ "$chown_dir" == "$target_home/"* && "$chown_dir" != "$target_home" ]]; do
+                    chown "$target_user:$target_user" "$chown_dir" 2>/dev/null || chown "$target_user" "$chown_dir" 2>/dev/null || true
+                    chown_dir="${chown_dir%/*}"
+                done
+            fi
             if update_write_atuin_guard_wrapper "$dir/atuin" "$preferred_src" 2>/dev/null; then
                 installed_wrapper=true
                 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then

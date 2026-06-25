@@ -1538,6 +1538,12 @@ function updateShellQuoteState(line: string, initialState: ShellQuoteState): She
 }
 
 function summarizeShellBlock(blockLines: string[], fallback: string): string {
+  for (const line of blockLines) {
+    const match = line.trim().match(/^#\s*acfs-summary:\s*(.+)$/);
+    const summary = match?.[1]?.trim();
+    if (summary) return summary;
+  }
+
   const topLevel: string[] = [];
   let skippingFunction = false;
   let skippingFunctionQuoteState: ShellQuoteState = { double: false, single: false };
