@@ -203,7 +203,7 @@ Key architectural decisions agents need to know.
         />
 
         <TipBox variant="info">
-          Every AI agent (Claude, Codex, Gemini) reads AGENTS.md at session start.
+          Every AI agent (Claude, Codex, Antigravity) reads AGENTS.md at session start.
           Keep it concise — agents have limited context windows.
         </TipBox>
       </Section>

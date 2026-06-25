@@ -95,11 +95,11 @@ Follow the browser prompts to authenticate with your **ChatGPT Pro/Plus/Team acc
 >
 > **If login fails:** Check ChatGPT Settings → Security → "API/Device access"
 
-### Gemini CLI
+### Antigravity CLI
 ```bash
-gemini
+agy
 ```
-Follow the prompts to authenticate with your Google account.
+Follow the prompts to authenticate with your Google account. ACFS keeps the model pinned to Gemini 3.1 Pro (High).
 
 ---
 
@@ -110,7 +110,7 @@ After logging in, **immediately** back up your credentials:
 ```bash
 caam backup claude my-main-account
 caam backup codex my-main-account
-caam backup gemini my-main-account
+caam backup agy my-main-account
 ```
 
 Now you can switch accounts later with:
@@ -155,7 +155,7 @@ Let's verify your agents are ready:
 
 ```bash
 # Check which agents are installed
-which claude codex gemini
+which claude codex agy
 
 # Check your agent credential backups
 caam ls

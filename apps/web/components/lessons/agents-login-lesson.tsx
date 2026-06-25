@@ -209,7 +209,7 @@ export function AgentsLoginLesson() {
           <CodeBlock
             code={`caam backup claude my-main-account
 caam backup codex my-main-account
-caam backup gemini my-main-account`}
+caam backup agy my-main-account`}
           />
         </div>
 
@@ -530,7 +530,29 @@ function CodexLoginSection() {
 // INTERACTIVE AGENT COMPARISON - Clickable agent selector with detail cards
 // =============================================================================
 
-type AgentId = "claude" | "codex" | "gemini";
+type AgentId = "claude" | "codex" | "antigravity";
+const AGENT_KEYS: AgentId[] = ["claude", "codex", "antigravity"];
+const AGENT_X_POSITION: Record<AgentId, number> = {
+  claude: 17,
+  codex: 50,
+  antigravity: 83,
+};
+const AGENT_START_X: Record<AgentId, number> = {
+  claude: 100,
+  codex: 300,
+  antigravity: 500,
+};
+const AGENT_LABELS: Record<AgentId, string> = {
+  claude: "Claude Code",
+  codex: "Codex CLI",
+  antigravity: "Antigravity CLI",
+};
+
+function particleUnit(agentKey: AgentId, index: number, salt: number) {
+  const agentOffset = AGENT_KEYS.indexOf(agentKey) + 1;
+  const seed = agentOffset * 997 + index * 37 + salt * 101;
+  return ((seed * 9301 + 49297) % 233280) / 233280;
+}
 
 // =============================================================================
 // LIVE AGENT TERMINAL RACE - Interactive multi-scenario auth visualization
@@ -556,7 +578,7 @@ interface Scenario {
   agents: {
     claude: ScenarioAgent;
     codex: ScenarioAgent;
-    gemini: ScenarioAgent;
+    antigravity: ScenarioAgent;
   };
 }
 
@@ -596,7 +618,7 @@ const SCENARIOS: Scenario[] = [
         result: "fail",
         finishDelay: 2600,
       },
-      gemini: {
+      antigravity: {
         lines: [
           { text: '$ agy "Create SSH keys for GitHub"', type: "command", delay: 0 },
           { text: "Let me explain SSH key cryptography...", type: "info", delay: 500 },
@@ -645,7 +667,7 @@ const SCENARIOS: Scenario[] = [
         result: "success",
         finishDelay: 1600,
       },
-      gemini: {
+      antigravity: {
         lines: [
           { text: '$ agy "Help me set up API auth"', type: "command", delay: 0 },
           { text: "There are several auth approaches:", type: "info", delay: 500 },
@@ -695,7 +717,7 @@ const SCENARIOS: Scenario[] = [
         result: "success",
         finishDelay: 4700,
       },
-      gemini: {
+      antigravity: {
         lines: [
           { text: "$ agy", type: "command", delay: 0 },
           { text: "Opening browser for Google sign-in...", type: "info", delay: 500 },
@@ -741,13 +763,13 @@ const SCENARIOS: Scenario[] = [
         result: "success",
         finishDelay: 2400,
       },
-      gemini: {
+      antigravity: {
         lines: [
-          { text: "$ caam backup gemini main-acct", type: "command", delay: 0 },
-          { text: "Backing up Gemini credentials...", type: "info", delay: 400 },
-          { text: "Credentials saved to ~/.caam/gemini/main-acct", type: "success", delay: 900 },
-          { text: "$ caam activate gemini work-acct", type: "command", delay: 1300 },
-          { text: "Switched Gemini to work-acct", type: "success", delay: 1800 },
+          { text: "$ caam backup agy main-acct", type: "command", delay: 0 },
+          { text: "Backing up Antigravity credentials...", type: "info", delay: 400 },
+          { text: "Credentials saved to ~/.caam/agy/main-acct", type: "success", delay: 900 },
+          { text: "$ caam activate agy work-acct", type: "command", delay: 1300 },
+          { text: "Switched Antigravity to work-acct", type: "success", delay: 1800 },
         ],
         result: "success",
         finishDelay: 2100,
@@ -786,12 +808,12 @@ const SCENARIOS: Scenario[] = [
         result: "fail",
         finishDelay: 2400,
       },
-      gemini: {
+      antigravity: {
         lines: [
           { text: '$ agy "Update the documentation"', type: "command", delay: 0 },
           { text: "Processing request...", type: "info", delay: 400 },
           { text: "Error: Quota exceeded for gemini-pro", type: "error", delay: 1000 },
-          { text: "$ caam activate gemini work-acct", type: "command", delay: 1500 },
+          { text: "$ caam activate agy work-acct", type: "command", delay: 1500 },
           { text: "Switched to work-acct", type: "success", delay: 2000 },
           { text: '$ agy "Update the documentation"', type: "command", delay: 2400 },
           { text: "Documentation updated across 8 files.", type: "success", delay: 3400 },
@@ -832,7 +854,7 @@ const SCENARIOS: Scenario[] = [
         result: "success",
         finishDelay: 2700,
       },
-      gemini: {
+      antigravity: {
         lines: [
           { text: '$ agy "Document the payments module"', type: "command", delay: 0 },
           { text: "Analyzing module public API...", type: "info", delay: 500 },
@@ -866,7 +888,7 @@ const AGENT_COLORS = {
     glow: "shadow-emerald-500/20",
     hex: "#10b981",
   },
-  gemini: {
+  antigravity: {
     text: "text-blue-400",
     bg: "bg-blue-500",
     bgFaint: "bg-blue-500/10",
@@ -893,12 +915,12 @@ function InteractiveAgentComparison() {
   const [visibleLines, setVisibleLines] = useState<Record<AgentId, number>>({
     claude: 0,
     codex: 0,
-    gemini: 0,
+    antigravity: 0,
   });
   const [agentDone, setAgentDone] = useState<Record<AgentId, boolean>>({
     claude: false,
     codex: false,
-    gemini: false,
+    antigravity: false,
   });
   const [particles, setParticles] = useState<Particle[]>([]);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -914,8 +936,8 @@ function InteractiveAgentComparison() {
 
   const resetState = useCallback(() => {
     clearTimers();
-    setVisibleLines({ claude: 0, codex: 0, gemini: 0 });
-    setAgentDone({ claude: false, codex: false, gemini: false });
+    setVisibleLines({ claude: 0, codex: 0, antigravity: 0 });
+    setAgentDone({ claude: false, codex: false, antigravity: false });
     setParticles([]);
     setIsPlaying(false);
   }, [clearTimers]);
@@ -928,10 +950,11 @@ function InteractiveAgentComparison() {
       particleIdRef.current += 1;
       newParticles.push({
         id: particleIdRef.current,
-        x: agentKey === "claude" ? 17 : agentKey === "codex" ? 50 : 83,
+        x: AGENT_X_POSITION[agentKey],
         y: 50,
-        angle: (Math.PI * 2 * i) / count + Math.random() * 0.5,
-        speed: 2 + Math.random() * 3,
+        angle:
+          (Math.PI * 2 * i) / count + particleUnit(agentKey, i, 1) * 0.5,
+        speed: 2 + particleUnit(agentKey, i, 2) * 3,
         life: 1,
         color,
       });
@@ -949,12 +972,12 @@ function InteractiveAgentComparison() {
   const playScenario = useCallback(
     (sc: Scenario) => {
       clearTimers();
-      setVisibleLines({ claude: 0, codex: 0, gemini: 0 });
-      setAgentDone({ claude: false, codex: false, gemini: false });
+      setVisibleLines({ claude: 0, codex: 0, antigravity: 0 });
+      setAgentDone({ claude: false, codex: false, antigravity: false });
       setParticles([]);
       setIsPlaying(true);
 
-      const agentKeys: AgentId[] = ["claude", "codex", "gemini"];
+      const agentKeys = AGENT_KEYS;
 
       for (const agentKey of agentKeys) {
         const agentScenario = sc.agents[agentKey];
@@ -1157,18 +1180,19 @@ function InteractiveAgentComparison() {
           </text>
 
           {/* Connection lines with animation */}
-          {(["claude", "codex", "gemini"] as AgentId[]).map((agentKey, i) => {
-            const startX = i === 0 ? 100 : i === 1 ? 300 : 500;
+          {AGENT_KEYS.map((agentKey) => {
+            const startX = AGENT_START_X[agentKey];
             const isDone = agentDone[agentKey];
             const isSuccess =
               isDone && scenario.agents[agentKey].result === "success";
             const isFail =
               isDone && scenario.agents[agentKey].result === "fail";
-            const color = isSuccess
-              ? AGENT_COLORS[agentKey].hex
-              : isFail
-                ? "#ef4444"
-                : "rgba(255,255,255,0.08)";
+            let color = "rgba(255,255,255,0.08)";
+            if (isSuccess) {
+              color = AGENT_COLORS[agentKey].hex;
+            } else if (isFail) {
+              color = "#ef4444";
+            }
 
             return (
               <g key={agentKey}>
@@ -1287,7 +1311,7 @@ function InteractiveAgentComparison() {
 
       {/* Terminal panels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-0 md:gap-px bg-white/[0.04]">
-        {(["claude", "codex", "gemini"] as AgentId[]).map((agentKey) => (
+        {AGENT_KEYS.map((agentKey) => (
           <AgentTerminalPanel
             key={`${scenario.id}-${agentKey}`}
             agentKey={agentKey}
@@ -1348,12 +1372,7 @@ function AgentTerminalPanel({
     }
   }, [visibleCount]);
 
-  const agentLabel =
-    agentKey === "claude"
-      ? "Claude Code"
-      : agentKey === "codex"
-        ? "Codex CLI"
-        : "Antigravity CLI";
+  const agentLabel = AGENT_LABELS[agentKey];
 
   return (
     <div className="bg-black/40 flex flex-col">

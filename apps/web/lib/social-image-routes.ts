@@ -5,10 +5,10 @@ const STATIC_ROUTE_SOCIAL_DATA: Record<string, SocialImageData> = {
     badge: "Agentic Coding",
     title: "Agent Flywheel",
     description:
-      "Turn a fresh VPS into a complete multi-agent coding environment with Claude, Codex, Gemini, and modern developer tooling.",
+      "Turn a fresh VPS into a complete multi-agent coding environment with Claude, Codex, Antigravity, and modern developer tooling.",
     path: "/",
     theme: "default",
-    tags: ["Claude", "Codex", "Gemini"],
+    tags: ["Claude", "Codex", "Antigravity"],
   },
   "/core-flywheel": {
     badge: "The 3-Tool Core Loop",

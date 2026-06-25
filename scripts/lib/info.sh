@@ -1590,7 +1590,7 @@ info_get_installed_tools_summary() {
     local agent_count=0
     info_binary_exists "claude" && agent_count=$((agent_count + 1))
     info_binary_exists "codex" && agent_count=$((agent_count + 1))
-    info_binary_exists "gemini" && agent_count=$((agent_count + 1))
+    info_binary_exists "agy" && agent_count=$((agent_count + 1))
     [[ $agent_count -ge 2 ]] && agents_ok="✓"
 
     # Stack tools
@@ -1796,7 +1796,7 @@ info_render_terminal() {
 
     echo -e "  $shell_icon ${C_DIM}Shell:${C_RESET}     zsh + oh-my-zsh + powerlevel10k"
     echo -e "  $lang_icon ${C_DIM}Languages:${C_RESET} bun, uv, rust, go"
-    echo -e "  $agents_icon ${C_DIM}Agents:${C_RESET}    claude, codex, gemini"
+    echo -e "  $agents_icon ${C_DIM}Agents:${C_RESET}    claude, codex, agy"
     echo -e "  $stack_icon ${C_DIM}Stack:${C_RESET}     ntm, bv, lazygit"
 
     if [[ -n "$skipped_tools" ]]; then

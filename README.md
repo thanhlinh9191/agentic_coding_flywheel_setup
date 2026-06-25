@@ -111,7 +111,7 @@ graph LR
     class LAPTOP,BROWSER user
     class STEPS wizard
     class UBUNTU,INSTALLER,CONFIGURED vps
-    class CLAUDE,CODEX,GEMINI agent
+    class CLAUDE,CODEX,AGY agent
 ```
 
 ### For Beginners
@@ -636,7 +636,8 @@ acfs-update --bootstrap-self-update
 | **Runtime** | uv (Python) | `uv self update` |
 | **Runtime** | Go | `apt upgrade` (if apt-managed) |
 | **Agents** | Claude Code | `claude update --channel latest` |
-| **Agents** | Codex, Gemini | `bun install -g @latest` |
+| **Agents** | Codex | `bun install -g @latest` |
+| **Agents** | Antigravity | `agy update` (or verified installer with `--force`) |
 | **Cloud** | Wrangler, Vercel | `bun install -g @latest` |
 | **Cloud** | Supabase | GitHub release tarball (sha256 checksums) |
 | **Stack** | ntm, slb, ubs, dcg, ru, etc. | Re-run upstream installers |
@@ -1251,7 +1252,7 @@ Claude Code should be installed and updated using its native mechanisms:
 - **Install:** ACFS uses the official native installer (`claude.ai/install.sh`), checksum-verified via `checksums.yaml` (installs to `~/.local/bin/claude`)
 - **Update:** Use `claude update --channel latest` (built-in) or run `acfs update --agents-only`
 
-This ensures proper authentication handling and avoids issues with alternative package manager builds. For Codex and Gemini, ACFS uses standard bun global package updates.
+This ensures proper authentication handling and avoids issues with alternative package manager builds. ACFS updates Codex with Bun global package updates and Antigravity with its native `agy update` path.
 
 ### Cloud & Database
 
@@ -1392,7 +1393,7 @@ The `--deep` flag runs functional tests beyond binary existence:
 
 | Category | Checks |
 |----------|--------|
-| **Agent Auth** | Claude config, Codex OAuth, Gemini credentials |
+| **Agent Auth** | Claude config, Codex OAuth, Antigravity credentials |
 | **Database** | PostgreSQL connection, ubuntu role exists |
 | **Cloud CLIs** | `gh auth status`, `wrangler whoami`, Supabase/Vercel tokens |
 | **Vault** | `VAULT_ADDR` configured |
@@ -3429,7 +3430,7 @@ tmux session: acfs-swarm
 ├── agent-2: Claude working on api
 ├── agent-3: Claude working on tests
 ├── agent-4: Codex reviewing PRs
-├── agent-5: Gemini writing docs
+├── agent-5: Antigravity writing docs
 └── ...
 ```
 
@@ -3579,7 +3580,7 @@ One agent is useful. Three agents working in parallel are transformative.
 Vibe coding assumes you'll run multiple agents simultaneously:
 - Claude for complex reasoning and architecture
 - Codex for rapid prototyping and refactoring
-- Gemini for documentation and research
+- Antigravity for documentation and research
 
 ACFS provides the coordination layer (Agent Mail, NTM, SLB) that makes this practical.
 
@@ -4415,7 +4416,7 @@ Vibe mode (`--mode vibe`) enables:
 - Passwordless sudo for ubuntu user
 - `--dangerously-skip-permissions` for Claude
 - `--dangerously-bypass-approvals-and-sandbox` for Codex
-- `--yolo` for Gemini
+- Always-proceed tool permission for Antigravity (`agy`)
 
 This is **intentionally insecure for velocity**. Use only on:
 - Throwaway VPS you don't care about

@@ -424,8 +424,9 @@ export function useCreateVPSChecklist(): [string[], (items: string[]) => void, b
 
   const setChecklist = useCallback((items: string[]) => {
     const normalized = normalizeStringList(items);
-    setCreateVPSChecklist(normalized);
-    queryClient.setQueryData(userPreferencesKeys.createVPSChecklist, normalized);
+    if (setCreateVPSChecklist(normalized)) {
+      queryClient.setQueryData(userPreferencesKeys.createVPSChecklist, normalized);
+    }
   }, [queryClient]);
 
   return [data ?? [], setChecklist, status === "success"];
@@ -467,8 +468,9 @@ export function useCheckedServices(): [string[], (serviceId: string) => void, bo
       currentSet.add(serviceId);
     }
     const newIds = [...currentSet];
-    setCheckedServices(newIds);
-    queryClient.setQueryData(userPreferencesKeys.checkedServices, newIds);
+    if (setCheckedServices(newIds)) {
+      queryClient.setQueryData(userPreferencesKeys.checkedServices, newIds);
+    }
   }, [queryClient]);
 
   return [data ?? [], toggleService, status === "success"];

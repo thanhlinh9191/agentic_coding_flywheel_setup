@@ -218,6 +218,17 @@ describe('Generated category scripts exist', () => {
     const installAllPath = resolve(GENERATED_DIR, 'install_all.sh');
     expect(existsSync(installAllPath)).toBe(true);
   });
+
+  test('generated installers honor manifest module selection', () => {
+    const agentsPath = resolve(GENERATED_DIR, 'install_agents.sh');
+    const content = readFileSync(agentsPath, 'utf-8');
+
+    expect(content).toContain('acfs_generated_ensure_selection()');
+    expect(content).toContain('source "$manifest_index"');
+    expect(content).toContain('acfs_generated_ensure_selection || return 1');
+    expect(content).toContain('if ! should_run_module "${module_id}"; then');
+    expect(content).toContain('log_info "Skipping agents.gemini (not selected)"');
+  });
 });
 
 describe('Generated verified installer args', () => {

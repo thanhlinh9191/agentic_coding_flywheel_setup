@@ -299,7 +299,7 @@ export function SafetyToolsLesson() {
           commands={[
             {
               command: "caam ls [tool]",
-              description: "List saved profiles (claude, codex, gemini)",
+              description: "List saved profiles (claude, codex, agy)",
             },
             {
               command: "caam backup <tool> <email>",

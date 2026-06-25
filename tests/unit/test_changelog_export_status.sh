@@ -241,6 +241,7 @@ EOF
     write_fake_command "$TEST_TARGET_HOME/.local/bin/rg" "ripgrep 14.1.0"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/claude" "claude 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/codex" "codex 1.2.3"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/uv" "uv 0.8.0"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/rustc" "rustc 1.85.0"
@@ -437,6 +438,7 @@ EOF
     write_fake_command "$TEST_TARGET_HOME/.local/bin/rg" "ripgrep 14.1.0"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/claude" "claude 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/codex" "codex 1.2.3"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/uv" "uv 0.8.0"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/rustc" "rustc 1.85.0"
@@ -5074,6 +5076,7 @@ test_status_ignores_current_shell_only_binaries() {
 
     write_fake_command "$TEST_FAKE_BIN/claude" "claude 9.9.9"
     write_fake_command "$TEST_FAKE_BIN/codex" "codex 9.9.9"
+    write_fake_command "$TEST_FAKE_BIN/agy" "agy 9.9.9"
     write_fake_command "$TEST_FAKE_BIN/gemini" "gemini 9.9.9"
     write_fake_command "$TEST_FAKE_BIN/ntm" "ntm 9.9.9"
 
@@ -5082,15 +5085,17 @@ test_status_ignores_current_shell_only_binaries() {
         TEST_STATUS_SCRIPT="$STATUS_SH" bash -lc '
             source "$TEST_STATUS_SCRIPT"
             _status_prepare_context
-            printf "claude=%s\ncodex=%s\ngemini=%s\nntm=%s\n" \
+            printf "claude=%s\ncodex=%s\nagy=%s\ngemini=%s\nntm=%s\n" \
                 "$(_status_binary_path claude 2>/dev/null || true)" \
                 "$(_status_binary_path codex 2>/dev/null || true)" \
+                "$(_status_binary_path agy 2>/dev/null || true)" \
                 "$(_status_binary_path gemini 2>/dev/null || true)" \
                 "$(_status_binary_path ntm 2>/dev/null || true)"
         ' 2>/dev/null)
 
     if [[ "$output" != *"$TEST_FAKE_BIN/claude"* ]] \
         && [[ "$output" != *"$TEST_FAKE_BIN/codex"* ]] \
+        && [[ "$output" != *"$TEST_FAKE_BIN/agy"* ]] \
         && [[ "$output" != *"$TEST_FAKE_BIN/gemini"* ]] \
         && [[ "$output" != *"$TEST_FAKE_BIN/ntm"* ]]; then
         harness_pass "status ignores current-shell-only binaries"
@@ -5152,6 +5157,7 @@ EOF
     rm -f "$TEST_TARGET_HOME/.local/bin/ntm"
     write_fake_command "$custom_bin/claude" "claude 1.2.3"
     write_fake_command "$custom_bin/codex" "codex 1.2.3"
+    write_fake_command "$custom_bin/agy" "agy 1.2.3"
     write_fake_command "$custom_bin/gemini" "gemini 1.2.3"
     write_fake_command "$custom_bin/ntm" "ntm 1.2.3"
 
@@ -10056,6 +10062,7 @@ JSON
         ([.checks[] | select(.id == "shell.plugins.zsh_syntax_highlighting") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "agent.alias.cc") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "agent.alias.cod") | .status] | first) == "pass" and
+        ([.checks[] | select(.id == "agent.antigravity") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "agent.alias.agy") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "agent.alias.gmi") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "agent.path.claude") | .details] | first) == ("native (" + $native_path + ")") and
@@ -10073,7 +10080,7 @@ JSON
 test_doctor_deep_agent_auth_uses_target_context_under_root_home() {
     setup_installed_layout_env
 
-    mkdir -p "$TEST_TARGET_HOME/.claude" "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini"
+    mkdir -p "$TEST_TARGET_HOME/.claude" "$TEST_TARGET_HOME/.codex" "$TEST_TARGET_HOME/.gemini/antigravity-cli" "$TEST_TARGET_HOME/.gemini"
 
     cat > "$TEST_TARGET_HOME/.claude/.credentials.json" <<'JSON'
 {
@@ -10095,8 +10102,11 @@ JSON
 GEMINI_API_KEY=gemini-token
 EOF
 
+    printf '%s\n' 'antigravity-token' > "$TEST_TARGET_HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+
     write_fake_command "$TEST_TARGET_HOME/.local/bin/claude" "claude 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/codex" "codex 1.2.3"
+    write_fake_command "$TEST_TARGET_HOME/.local/bin/agy" "agy 1.2.3"
     write_fake_command "$TEST_TARGET_HOME/.local/bin/gemini" "gemini 1.2.3"
 
     cat > "$TEST_FAKE_BIN/curl" <<'EOF'
@@ -10143,6 +10153,7 @@ EOF
         .deep_mode == true and
         ([.checks[] | select(.id == "deep.agent.claude_auth") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "deep.agent.codex_auth") | .status] | first) == "pass" and
+        ([.checks[] | select(.id == "deep.agent.antigravity_auth") | .status] | first) == "pass" and
         ([.checks[] | select(.id == "deep.agent.gemini_auth") | .status] | first) == "pass"
     ' >/dev/null 2>&1; then
         harness_pass "doctor deep agent auth uses installed target context under root home"

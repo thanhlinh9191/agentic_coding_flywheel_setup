@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090,SC1091
 # ============================================================
 # AUTO-GENERATED FROM acfs.manifest.yaml - DO NOT EDIT
 # Regenerate: bun run generate (from packages/manifest)
@@ -256,6 +256,38 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     export ACFS_BOOTSTRAP_DIR ACFS_LIB_DIR ACFS_GENERATED_DIR ACFS_ASSETS_DIR ACFS_CHECKSUMS_YAML ACFS_MANIFEST_YAML
 fi
 
+acfs_generated_ensure_selection() {
+    if [[ "${ACFS_MANIFEST_INDEX_LOADED:-false}" != "true" ]]; then
+        local manifest_index="${ACFS_GENERATED_DIR:-$ACFS_GENERATED_SCRIPT_DIR}/manifest_index.sh"
+        if [[ ! -f "$manifest_index" ]]; then
+            log_error "Manifest index not found: $manifest_index"
+            return 1
+        fi
+        source "$manifest_index"
+        ACFS_MANIFEST_INDEX_LOADED=true
+        export ACFS_MANIFEST_INDEX_LOADED
+    fi
+
+    if [[ "${ACFS_GENERATED_SELECTION_READY:-false}" != "true" ]]; then
+        if ! declare -f acfs_resolve_selection >/dev/null 2>&1; then
+            log_error "Install selection helper not loaded"
+            return 1
+        fi
+        acfs_resolve_selection || return 1
+        ACFS_GENERATED_SELECTION_READY=true
+        export ACFS_GENERATED_SELECTION_READY
+    fi
+
+    return 0
+}
+
+acfs_generated_should_run_module() {
+    local module_id="${1:-}"
+    [[ -n "$module_id" ]] || return 1
+    acfs_generated_ensure_selection || return 1
+    should_run_module "$module_id"
+}
+
 # Source contract validation
 if [[ -f "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh" ]]; then
     source "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh"
@@ -295,6 +327,11 @@ acfs_security_init() {
 install_tools_lazygit() {
     local module_id="tools.lazygit"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.lazygit (not selected)"
+        return 0
+    fi
     log_step "Installing tools.lazygit"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -350,6 +387,11 @@ INSTALL_TOOLS_LAZYGIT
 install_tools_lazydocker() {
     local module_id="tools.lazydocker"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.lazydocker (not selected)"
+        return 0
+    fi
     log_step "Installing tools.lazydocker"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -401,6 +443,11 @@ INSTALL_TOOLS_LAZYDOCKER
 install_tools_atuin() {
     local module_id="tools.atuin"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.atuin (not selected)"
+        return 0
+    fi
     log_step "Installing tools.atuin"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -568,6 +615,11 @@ INSTALL_TOOLS_ATUIN
 install_tools_zoxide() {
     local module_id="tools.zoxide"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.zoxide (not selected)"
+        return 0
+    fi
     log_step "Installing tools.zoxide"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -647,6 +699,11 @@ INSTALL_TOOLS_ZOXIDE
 install_tools_ast_grep() {
     local module_id="tools.ast_grep"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.ast_grep (not selected)"
+        return 0
+    fi
     log_step "Installing tools.ast_grep"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -681,6 +738,11 @@ INSTALL_TOOLS_AST_GREP
 install_tools_vault() {
     local module_id="tools.vault"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping tools.vault (not selected)"
+        return 0
+    fi
     log_step "Installing tools.vault"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -744,6 +806,11 @@ INSTALL_TOOLS_VAULT
 install_utils_giil() {
     local module_id="utils.giil"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.giil (not selected)"
+        return 0
+    fi
     log_step "Installing utils.giil"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -833,6 +900,11 @@ INSTALL_UTILS_GIIL
 install_utils_csctf() {
     local module_id="utils.csctf"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.csctf (not selected)"
+        return 0
+    fi
     log_step "Installing utils.csctf"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -922,6 +994,11 @@ INSTALL_UTILS_CSCTF
 install_utils_xf() {
     local module_id="utils.xf"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.xf (not selected)"
+        return 0
+    fi
     log_step "Installing utils.xf"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1011,6 +1088,11 @@ INSTALL_UTILS_XF
 install_utils_toon_rust() {
     local module_id="utils.toon_rust"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.toon_rust (not selected)"
+        return 0
+    fi
     log_step "Installing utils.toon_rust"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1100,6 +1182,11 @@ INSTALL_UTILS_TOON_RUST
 install_utils_rano() {
     local module_id="utils.rano"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.rano (not selected)"
+        return 0
+    fi
     log_step "Installing utils.rano"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1189,6 +1276,11 @@ INSTALL_UTILS_RANO
 install_utils_mdwb() {
     local module_id="utils.mdwb"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.mdwb (not selected)"
+        return 0
+    fi
     log_step "Installing utils.mdwb"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1278,6 +1370,11 @@ INSTALL_UTILS_MDWB
 install_utils_s2p() {
     local module_id="utils.s2p"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.s2p (not selected)"
+        return 0
+    fi
     log_step "Installing utils.s2p"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1367,6 +1464,11 @@ INSTALL_UTILS_S2P
 install_utils_rust_proxy() {
     local module_id="utils.rust_proxy"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.rust_proxy (not selected)"
+        return 0
+    fi
     log_step "Installing utils.rust_proxy"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1417,6 +1519,11 @@ INSTALL_UTILS_RUST_PROXY
 install_utils_aadc() {
     local module_id="utils.aadc"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.aadc (not selected)"
+        return 0
+    fi
     log_step "Installing utils.aadc"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1467,6 +1574,11 @@ INSTALL_UTILS_AADC
 install_utils_caut() {
     local module_id="utils.caut"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping utils.caut (not selected)"
+        return 0
+    fi
     log_step "Installing utils.caut"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then

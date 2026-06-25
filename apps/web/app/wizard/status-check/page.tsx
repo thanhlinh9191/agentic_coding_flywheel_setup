@@ -295,7 +295,7 @@ export default function StatusCheckPage() {
           <p className="text-[oklch(0.72_0.19_145)]">✔ Shell: zsh with oh-my-zsh</p>
           <p className="text-[oklch(0.72_0.19_145)]">✔ Languages: bun, uv, rust, go</p>
           <p className="text-[oklch(0.72_0.19_145)]">✔ Tools: <Jargon term="tmux">tmux</Jargon>, <Jargon term="ripgrep">ripgrep</Jargon>, <Jargon term="lazygit">lazygit</Jargon></p>
-          <p className="text-[oklch(0.72_0.19_145)]">✔ Agents: claude-code, codex</p>
+          <p className="text-[oklch(0.72_0.19_145)]">✔ Agents: claude-code, codex, agy</p>
           <p className="mt-2 text-foreground">All checks passed!</p>
         </div>
       </OutputPreview>
@@ -435,7 +435,7 @@ export default function StatusCheckPage() {
             </p>
             <ul className="list-disc space-y-1 pl-5">
               <li><strong>Recommended now:</strong> GitHub CLI and Claude Code (so you can save code and start coding immediately)</li>
-              <li><strong>Optional now:</strong> Codex, Gemini, and Tailscale (only if you plan to use them)</li>
+              <li><strong>Optional now:</strong> Codex, Antigravity, and Tailscale (only if you plan to use them)</li>
               <li><strong>Optional later:</strong> Cloud tools (Wrangler / Supabase / Vercel) and anything else you don&apos;t need yet</li>
             </ul>
             <p className="text-xs text-muted-foreground">

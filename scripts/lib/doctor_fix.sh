@@ -1651,6 +1651,9 @@ dispatch_fix() {
             fix_stack_install "$check_id" "codex" \
                 "bun install -g --trust @openai/codex@latest"
             ;;
+        agent.antigravity)
+            fix_verified_install "$check_id" "agy" "antigravity"
+            ;;
         agent.gemini)
             fix_stack_install "$check_id" "gemini" \
                 "bun install -g --trust @google/gemini-cli@latest"

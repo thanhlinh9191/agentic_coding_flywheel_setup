@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090,SC1091
 # ============================================================
 # AUTO-GENERATED FROM acfs.manifest.yaml - DO NOT EDIT
 # Regenerate: bun run generate (from packages/manifest)
@@ -256,6 +256,38 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     export ACFS_BOOTSTRAP_DIR ACFS_LIB_DIR ACFS_GENERATED_DIR ACFS_ASSETS_DIR ACFS_CHECKSUMS_YAML ACFS_MANIFEST_YAML
 fi
 
+acfs_generated_ensure_selection() {
+    if [[ "${ACFS_MANIFEST_INDEX_LOADED:-false}" != "true" ]]; then
+        local manifest_index="${ACFS_GENERATED_DIR:-$ACFS_GENERATED_SCRIPT_DIR}/manifest_index.sh"
+        if [[ ! -f "$manifest_index" ]]; then
+            log_error "Manifest index not found: $manifest_index"
+            return 1
+        fi
+        source "$manifest_index"
+        ACFS_MANIFEST_INDEX_LOADED=true
+        export ACFS_MANIFEST_INDEX_LOADED
+    fi
+
+    if [[ "${ACFS_GENERATED_SELECTION_READY:-false}" != "true" ]]; then
+        if ! declare -f acfs_resolve_selection >/dev/null 2>&1; then
+            log_error "Install selection helper not loaded"
+            return 1
+        fi
+        acfs_resolve_selection || return 1
+        ACFS_GENERATED_SELECTION_READY=true
+        export ACFS_GENERATED_SELECTION_READY
+    fi
+
+    return 0
+}
+
+acfs_generated_should_run_module() {
+    local module_id="${1:-}"
+    [[ -n "$module_id" ]] || return 1
+    acfs_generated_ensure_selection || return 1
+    should_run_module "$module_id"
+}
+
 # Source contract validation
 if [[ -f "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh" ]]; then
     source "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh"
@@ -295,6 +327,11 @@ acfs_security_init() {
 install_db_postgres18() {
     local module_id="db.postgres18"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping db.postgres18 (not selected)"
+        return 0
+    fi
     log_step "Installing db.postgres18"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then

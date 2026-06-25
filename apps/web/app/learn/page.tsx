@@ -50,7 +50,7 @@ const QUICK_REFERENCE_ITEMS: QuickReferenceItem[] = [
     lessonSlug: "agent-commands",
     icon: Terminal,
     title: "Agent Commands",
-    desc: "Claude, Codex, Gemini shortcuts",
+    desc: "Claude, Codex, Antigravity shortcuts",
     gradient: "from-violet-500/10 to-violet-500/5",
   },
   {

@@ -21,12 +21,14 @@ import {
   CREATE_VPS_CHECKLIST_KEY,
   getACFSRef,
   getCreateVPSChecklist,
+  getCheckedServices,
   getSSHUsername,
   getVPSReadinessSelection,
   getVPSIP,
   isCreateVPSChecklistComplete,
   normalizeSSHUsername,
   setACFSRef,
+  setCheckedServices,
   setCreateVPSChecklist,
   setSSHUsername,
   setVPSReadinessSelection,
@@ -44,6 +46,7 @@ const originalWindow = globalThis.window;
 const originalLocalStorage = globalThis.localStorage;
 const VPS_IP_TEST_KEY = "agent-flywheel-vps-ip";
 const SSH_USERNAME_TEST_KEY = "agent-flywheel-ssh-username";
+const CHECKED_SERVICES_TEST_KEY = "agent-flywheel-checked-services";
 
 function installMockBrowser(options?: {
   failSetItemForKey?: string;
@@ -234,6 +237,28 @@ describe("progress persistence guards", () => {
     expect(isCreateVPSChecklistComplete(["ubuntu", "region", "password"])).toBe(false);
     expect(isCreateVPSChecklistComplete(["region", "ubuntu", "created", "password"])).toBe(true);
     expect(isCreateVPSChecklistComplete(["region", "ubuntu", "created", "password", "extra"])).toBe(true);
+  });
+
+  test("checked services persistence normalizes values and only emits on success", () => {
+    const successBrowser = installMockBrowser({
+      initialValues: {
+        [CHECKED_SERVICES_TEST_KEY]: JSON.stringify(["github", "github", 42, "codex-cli"]),
+      },
+    });
+
+    expect(getCheckedServices()).toEqual(["github", "codex-cli"]);
+    expect(setCheckedServices(["antigravity-cli", "antigravity-cli", "tailscale"])).toBe(true);
+    expect(successBrowser.getStoredValue(CHECKED_SERVICES_TEST_KEY)).toBe(
+      JSON.stringify(["antigravity-cli", "tailscale"])
+    );
+    expect(successBrowser.dispatchCalls).toHaveLength(1);
+
+    const failingBrowser = installMockBrowser({
+      failSetItemForKey: CHECKED_SERVICES_TEST_KEY,
+    });
+    expect(setCheckedServices(["github"])).toBe(false);
+    expect(failingBrowser.getStoredValue(CHECKED_SERVICES_TEST_KEY)).toBeNull();
+    expect(failingBrowser.dispatchCalls).toHaveLength(0);
   });
 
   test("VPS readiness selection persistence normalizes wizard inputs", () => {

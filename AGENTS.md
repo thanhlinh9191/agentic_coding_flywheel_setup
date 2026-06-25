@@ -342,7 +342,7 @@ These are installed on target VPS (not development machine).
 **Coding Agents:**
 - **Claude Code** — Anthropic's coding agent
 - **Codex CLI** — OpenAI's coding agent
-- **Gemini CLI** — Google's coding agent
+- **Antigravity CLI** — Google's coding agent
 
 **Cloud & Database:**
 - **PostgreSQL 18** — Database

@@ -12015,7 +12015,7 @@ EOF
     run grep -F 'acfs_smoke_install_fix_command lang.bun lang.uv lang.rust lang.go' "$installer"
     assert_success
 
-    run grep -F 'acfs_smoke_install_fix_command agents.claude agents.codex agents.gemini' "$installer"
+    run grep -F 'acfs_smoke_install_fix_command agents.claude agents.codex agents.antigravity' "$installer"
     assert_success
 
     run grep -F 'acfs_smoke_install_fix_command stack.ntm' "$installer"

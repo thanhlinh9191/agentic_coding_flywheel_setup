@@ -379,7 +379,7 @@ function WhyItMattersCard() {
             Your Agents Run in tmux
           </h4>
           <p className="text-white/60">
-            Your coding agents (Claude, Codex, Gemini) run in tmux panes. If SSH
+            Your coding agents (Claude, Codex, Antigravity) run in tmux panes. If SSH
             drops, they keep running. When you reconnect and reattach,
             they&apos;re still there!
           </p>

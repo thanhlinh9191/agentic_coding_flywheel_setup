@@ -2055,7 +2055,7 @@ check_agents() {
 
     check_command "agent.claude" "Claude Code" "claude" "$(fix_for_module "agents.claude")"
     check_command "agent.codex" "Codex CLI" "codex" "$(fix_for_module "agents.codex")"
-    check_command "agent.gemini" "Gemini CLI" "gemini" "$(fix_for_module "agents.gemini")"
+    check_command "agent.antigravity" "Antigravity CLI" "agy" "$(fix_for_module "agents.antigravity")"
 
     # Check aliases are defined in the zshrc
     local alias_fix
@@ -2074,20 +2074,20 @@ check_agents() {
         check "agent.alias.cod" "cod alias" "warn" "not in zshrc" "$alias_fix"
     fi
 
-    # agy is defined as a shell function (not an alias) in acfs.zshrc — the
+    # agy is defined as an alias or shell function in acfs.zshrc — the
     # Antigravity CLI, successor to the retired gmi/Gemini CLI (the forward path).
     if grep -q "^agy()" "$target_zshrc" 2>/dev/null || grep -q "^alias agy=" "$target_zshrc" 2>/dev/null; then
-        check "agent.alias.agy" "agy function" "pass"
+        check "agent.alias.agy" "agy alias/function" "pass"
     else
-        check "agent.alias.agy" "agy function" "warn" "not in zshrc" "$alias_fix"
+        check "agent.alias.agy" "agy alias/function" "warn" "not in zshrc" "$alias_fix"
     fi
 
-    # gmi is defined as a shell function (not an alias) in acfs.zshrc — LEGACY
+    # gmi is defined as an alias or shell function in acfs.zshrc — LEGACY
     # (Gemini CLI retired 2026-06-18; kept only for reading old ~/.gemini/tmp history)
     if grep -q "^gmi()" "$target_zshrc" 2>/dev/null || grep -q "^alias gmi=" "$target_zshrc" 2>/dev/null; then
-        check "agent.alias.gmi" "gmi function" "pass"
+        check "agent.alias.gmi" "gmi alias/function" "pass"
     else
-        check "agent.alias.gmi" "gmi function" "warn" "not in zshrc" "$alias_fix"
+        check "agent.alias.gmi" "gmi alias/function" "warn" "not in zshrc" "$alias_fix"
     fi
 
     # Check for PATH conflicts (bead hi7)
@@ -3367,7 +3367,24 @@ run_deep_checks() {
 deep_check_agent_auth() {
     check_claude_auth
     check_codex_auth
-    check_gemini_auth
+    check_antigravity_auth
+    if doctor_binary_path gemini >/dev/null 2>&1 && legacy_gemini_auth_artifact_exists; then
+        check_gemini_auth
+    fi
+}
+
+legacy_gemini_auth_artifact_exists() {
+    local auth_home=""
+    local gemini_home=""
+    auth_home="$(doctor_runtime_home)"
+    gemini_home="${GEMINI_CLI_HOME:-$auth_home}"
+    [[ -n "${GEMINI_API_KEY:-}" ]] && return 0
+    [[ -n "${GOOGLE_API_KEY:-}" ]] && return 0
+    [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]] && return 0
+    [[ -f "$gemini_home/.gemini/.env" ]] && return 0
+    [[ -f "$gemini_home/.gemini/google_accounts.json" ]] && return 0
+    [[ -f "$gemini_home/.gemini/oauth_creds.json" ]] && return 0
+    return 1
 }
 
 # check_claude_auth - Thorough Claude Code authentication check
@@ -3483,6 +3500,33 @@ check_codex_auth() {
         check "deep.agent.codex_auth" "Codex CLI auth" "pass" "API key authenticated (pay-as-you-go)"
     else
         check "deep.agent.codex_auth" "Codex CLI auth" "warn" "not authenticated" "Run: codex login --device-auth"
+    fi
+}
+
+# check_antigravity_auth - Thorough Antigravity CLI authentication check
+# Antigravity stores OAuth state under ~/.gemini/antigravity-cli.
+check_antigravity_auth() {
+    local auth_home=""
+    auth_home="$(doctor_runtime_home)"
+
+    local agy_bin=""
+    agy_bin="$(doctor_binary_path agy 2>/dev/null || true)"
+    if [[ -z "$agy_bin" ]]; then
+        check "deep.agent.antigravity_auth" "Antigravity CLI" "warn" "not installed" "acfs update --force --agents-only"
+        return
+    fi
+
+    if ! "$agy_bin" --version &>/dev/null && ! "$agy_bin" --help &>/dev/null; then
+        check "deep.agent.antigravity_auth" "Antigravity CLI auth" "fail" "binary error" "Reinstall: acfs update --force --agents-only"
+        return
+    fi
+
+    local antigravity_home="${ANTIGRAVITY_HOME:-$auth_home/.gemini/antigravity-cli}"
+    local token_file="$antigravity_home/antigravity-oauth-token"
+    if [[ -s "$token_file" ]]; then
+        check "deep.agent.antigravity_auth" "Antigravity CLI auth" "pass" "authenticated"
+    else
+        check "deep.agent.antigravity_auth" "Antigravity CLI auth" "warn" "not authenticated" "Run: agy to authenticate"
     fi
 }
 
@@ -4805,7 +4849,7 @@ main() {
                 echo ""
                 echo "By default, doctor runs quick existence checks only."
                 echo "Use --deep for thorough validation including:"
-                echo "  - Agent authentication (claude, codex, gemini)"
+                echo "  - Agent authentication (claude, codex, agy)"
                 echo "  - Database connectivity (PostgreSQL)"
                 echo "  - Cloud CLI authentication (vault, wrangler, etc.)"
                 echo ""

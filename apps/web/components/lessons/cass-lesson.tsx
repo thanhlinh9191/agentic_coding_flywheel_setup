@@ -1058,7 +1058,7 @@ function InteractiveSessionSearch() {
       pushTimer(setTimeout(() => {
         setTerminalLines((prev) => [
           ...prev,
-          `Scanning ${sc.stats.agents} agents: claude, codex, gemini, cursor`,
+          `Scanning ${sc.stats.agents} agents: claude, codex, antigravity, cursor`,
         ]);
       }, 600));
 

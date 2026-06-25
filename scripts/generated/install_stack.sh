@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090,SC1091
 # ============================================================
 # AUTO-GENERATED FROM acfs.manifest.yaml - DO NOT EDIT
 # Regenerate: bun run generate (from packages/manifest)
@@ -256,6 +256,38 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     export ACFS_BOOTSTRAP_DIR ACFS_LIB_DIR ACFS_GENERATED_DIR ACFS_ASSETS_DIR ACFS_CHECKSUMS_YAML ACFS_MANIFEST_YAML
 fi
 
+acfs_generated_ensure_selection() {
+    if [[ "${ACFS_MANIFEST_INDEX_LOADED:-false}" != "true" ]]; then
+        local manifest_index="${ACFS_GENERATED_DIR:-$ACFS_GENERATED_SCRIPT_DIR}/manifest_index.sh"
+        if [[ ! -f "$manifest_index" ]]; then
+            log_error "Manifest index not found: $manifest_index"
+            return 1
+        fi
+        source "$manifest_index"
+        ACFS_MANIFEST_INDEX_LOADED=true
+        export ACFS_MANIFEST_INDEX_LOADED
+    fi
+
+    if [[ "${ACFS_GENERATED_SELECTION_READY:-false}" != "true" ]]; then
+        if ! declare -f acfs_resolve_selection >/dev/null 2>&1; then
+            log_error "Install selection helper not loaded"
+            return 1
+        fi
+        acfs_resolve_selection || return 1
+        ACFS_GENERATED_SELECTION_READY=true
+        export ACFS_GENERATED_SELECTION_READY
+    fi
+
+    return 0
+}
+
+acfs_generated_should_run_module() {
+    local module_id="${1:-}"
+    [[ -n "$module_id" ]] || return 1
+    acfs_generated_ensure_selection || return 1
+    should_run_module "$module_id"
+}
+
 # Source contract validation
 if [[ -f "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh" ]]; then
     source "$ACFS_GENERATED_SCRIPT_DIR/../lib/contract.sh"
@@ -295,6 +327,11 @@ acfs_security_init() {
 install_stack_ntm() {
     local module_id="stack.ntm"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.ntm (not selected)"
+        return 0
+    fi
     log_step "Installing stack.ntm"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -374,6 +411,11 @@ INSTALL_STACK_NTM
 install_stack_mcp_agent_mail() {
     local module_id="stack.mcp_agent_mail"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.mcp_agent_mail (not selected)"
+        return 0
+    fi
     log_step "Installing stack.mcp_agent_mail"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -730,6 +772,11 @@ INSTALL_STACK_MCP_AGENT_MAIL
 install_stack_meta_skill() {
     local module_id="stack.meta_skill"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.meta_skill (not selected)"
+        return 0
+    fi
     log_step "Installing stack.meta_skill"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -829,6 +876,11 @@ INSTALL_STACK_META_SKILL
 install_stack_automated_plan_reviser() {
     local module_id="stack.automated_plan_reviser"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.automated_plan_reviser (not selected)"
+        return 0
+    fi
     log_step "Installing stack.automated_plan_reviser"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -928,6 +980,11 @@ INSTALL_STACK_AUTOMATED_PLAN_REVISER
 install_stack_jeffreysprompts() {
     local module_id="stack.jeffreysprompts"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.jeffreysprompts (not selected)"
+        return 0
+    fi
     log_step "Installing stack.jeffreysprompts"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1027,6 +1084,11 @@ INSTALL_STACK_JEFFREYSPROMPTS
 install_stack_process_triage() {
     local module_id="stack.process_triage"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.process_triage (not selected)"
+        return 0
+    fi
     log_step "Installing stack.process_triage"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1126,6 +1188,11 @@ INSTALL_STACK_PROCESS_TRIAGE
 install_stack_ultimate_bug_scanner() {
     local module_id="stack.ultimate_bug_scanner"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.ultimate_bug_scanner (not selected)"
+        return 0
+    fi
     log_step "Installing stack.ultimate_bug_scanner"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1215,6 +1282,11 @@ INSTALL_STACK_ULTIMATE_BUG_SCANNER
 install_stack_beads_rust() {
     local module_id="stack.beads_rust"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.beads_rust (not selected)"
+        return 0
+    fi
     log_step "Installing stack.beads_rust"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1304,6 +1376,11 @@ INSTALL_STACK_BEADS_RUST
 install_stack_beads_viewer() {
     local module_id="stack.beads_viewer"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.beads_viewer (not selected)"
+        return 0
+    fi
     log_step "Installing stack.beads_viewer"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1383,6 +1460,11 @@ INSTALL_STACK_BEADS_VIEWER
 install_stack_cass() {
     local module_id="stack.cass"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.cass (not selected)"
+        return 0
+    fi
     log_step "Installing stack.cass"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1487,6 +1569,11 @@ INSTALL_STACK_CASS
 install_stack_cm() {
     local module_id="stack.cm"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.cm (not selected)"
+        return 0
+    fi
     log_step "Installing stack.cm"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1576,6 +1663,11 @@ INSTALL_STACK_CM
 install_stack_caam() {
     local module_id="stack.caam"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.caam (not selected)"
+        return 0
+    fi
     log_step "Installing stack.caam"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1655,6 +1747,11 @@ INSTALL_STACK_CAAM
 install_stack_slb() {
     local module_id="stack.slb"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.slb (not selected)"
+        return 0
+    fi
     log_step "Installing stack.slb"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1723,6 +1820,11 @@ INSTALL_STACK_SLB
 install_stack_dcg() {
     local module_id="stack.dcg"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.dcg (not selected)"
+        return 0
+    fi
     log_step "Installing stack.dcg"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1853,6 +1955,11 @@ INSTALL_STACK_DCG
 install_stack_ru() {
     local module_id="stack.ru"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.ru (not selected)"
+        return 0
+    fi
     log_step "Installing stack.ru"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -1932,6 +2039,11 @@ INSTALL_STACK_RU
 install_stack_brenner_bot() {
     local module_id="stack.brenner_bot"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.brenner_bot (not selected)"
+        return 0
+    fi
     log_step "Installing stack.brenner_bot"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2021,6 +2133,11 @@ INSTALL_STACK_BRENNER_BOT
 install_stack_rch() {
     local module_id="stack.rch"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.rch (not selected)"
+        return 0
+    fi
     log_step "Installing stack.rch"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2110,6 +2227,11 @@ INSTALL_STACK_RCH
 install_stack_wezterm_automata() {
     local module_id="stack.wezterm_automata"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.wezterm_automata (not selected)"
+        return 0
+    fi
     log_step "Installing stack.wezterm_automata"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2160,6 +2282,11 @@ INSTALL_STACK_WEZTERM_AUTOMATA
 install_stack_srps() {
     local module_id="stack.srps"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.srps (not selected)"
+        return 0
+    fi
     log_step "Installing stack.srps"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2265,6 +2392,11 @@ INSTALL_STACK_SRPS
 install_stack_frankensearch() {
     local module_id="stack.frankensearch"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.frankensearch (not selected)"
+        return 0
+    fi
     log_step "Installing stack.frankensearch"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2427,6 +2559,11 @@ INSTALL_STACK_FRANKENSEARCH
 install_stack_storage_ballast_helper() {
     local module_id="stack.storage_ballast_helper"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.storage_ballast_helper (not selected)"
+        return 0
+    fi
     log_step "Installing stack.storage_ballast_helper"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2516,6 +2653,11 @@ INSTALL_STACK_STORAGE_BALLAST_HELPER
 install_stack_cross_agent_session_resumer() {
     local module_id="stack.cross_agent_session_resumer"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.cross_agent_session_resumer (not selected)"
+        return 0
+    fi
     log_step "Installing stack.cross_agent_session_resumer"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2605,6 +2747,11 @@ INSTALL_STACK_CROSS_AGENT_SESSION_RESUMER
 install_stack_doodlestein_self_releaser() {
     local module_id="stack.doodlestein_self_releaser"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.doodlestein_self_releaser (not selected)"
+        return 0
+    fi
     log_step "Installing stack.doodlestein_self_releaser"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2694,6 +2841,11 @@ INSTALL_STACK_DOODLESTEIN_SELF_RELEASER
 install_stack_agent_settings_backup() {
     local module_id="stack.agent_settings_backup"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.agent_settings_backup (not selected)"
+        return 0
+    fi
     log_step "Installing stack.agent_settings_backup"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
@@ -2836,6 +2988,11 @@ INSTALL_STACK_AGENT_SETTINGS_BACKUP
 install_stack_pcr() {
     local module_id="stack.pcr"
     acfs_require_contract "module:${module_id}" || return 1
+    acfs_generated_ensure_selection || return 1
+    if ! should_run_module "${module_id}"; then
+        log_info "Skipping stack.pcr (not selected)"
+        return 0
+    fi
     log_step "Installing stack.pcr"
 
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
