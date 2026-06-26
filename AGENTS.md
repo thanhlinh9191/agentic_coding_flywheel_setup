@@ -133,6 +133,31 @@ cd apps/web && bun run build
 
 If you see errors, **carefully understand and resolve each issue**. Read sufficient context to fix them the RIGHT way.
 
+## Automated Flywheel Setup Checker Verification (CRITICAL)
+
+Whenever you revise, update, or fix anything in ACFS, you MUST also verify with the external checker at `/dp/automated_flywheel_setup_checker`.
+
+Minimum baseline for every ACFS change:
+
+```bash
+cargo run --manifest-path /dp/automated_flywheel_setup_checker/Cargo.toml -- \
+  validate --path /data/projects/agentic_coding_flywheel_setup/checksums.yaml
+cargo run --manifest-path /dp/automated_flywheel_setup_checker/Cargo.toml -- list
+cargo run --manifest-path /dp/automated_flywheel_setup_checker/Cargo.toml -- \
+  check --dry-run --local
+```
+
+If `automated_flywheel_setup_checker` is installed on PATH, using that binary is fine. If the change touches installer execution, `checksums.yaml`, verified installer metadata, or generated installer scripts, consider the stronger checker modes too:
+
+```bash
+automated_flywheel_setup_checker validate \
+  --path /data/projects/agentic_coding_flywheel_setup/checksums.yaml \
+  --check-urls --check-hashes
+automated_flywheel_setup_checker check --parallel 4 <specific-installers>
+```
+
+Use `rch exec -- cargo ...` for expensive checker builds when RCH is available. Do not silently skip this checker; if Docker, network, or the checker itself blocks a stronger run, report exactly which checker commands passed and which could not run.
+
 ## Verified Installer Checksum Discipline
 
 ACFS treats `checksums.yaml` as a security boundary for any manifest module that uses `verified_installer`.

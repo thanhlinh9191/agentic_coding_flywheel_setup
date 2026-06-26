@@ -2118,7 +2118,7 @@ Safe variants are allowlisted:
 ### Installation
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh?$(date +%s)" | bash
+acfs update --stack-only
 ```
 
 ### Claude Code Configuration
@@ -2706,7 +2706,7 @@ agentic_coding_flywheel_setup/
 │   │   ├── install_agents.sh     # AI coding agents
 │   │   ├── install_cloud.sh      # Cloud CLIs
 │   │   ├── install_stack.sh      # Dicklesworthstone stack
-│   │   ├── install_all.sh        # Master installer
+│   │   ├── install_all.sh        # Top-level installer
 │   │   └── doctor_checks.sh      # Verification checks
 │   ├── providers/                # VPS provider guides
 │   │   ├── ovh.md
@@ -4305,9 +4305,9 @@ Doctor checks are generated directly from the manifest, so they verify the exact
 4. **Reinstall if binary is missing**:
    ```bash
    which dcg  # Should return a path
-   # If missing, reinstall:
-   curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh" | bash
-   dcg install  # Register hook after reinstall
+   # If missing, reinstall through the ACFS verified installer path:
+   acfs update --stack-only
+   dcg install --force  # Register hook after reinstall
    ```
 
 ### Complete Reset
