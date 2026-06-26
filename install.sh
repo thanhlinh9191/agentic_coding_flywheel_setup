@@ -6603,6 +6603,22 @@ NTM_CONFIG_EOF
             [[ -n "$curl_bin" ]] || return 127
             "$curl_bin" "$@"
         }
+        agent_mail_readiness_ready() {
+            local readiness_body=""
+            local readiness_url=""
+
+            for readiness_url in \
+                http://127.0.0.1:8765/health/readiness \
+                http://127.0.0.1:8765/health
+            do
+                readiness_body="$(agent_mail_service_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+                if printf "%s\n" "$readiness_body" | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\"([[:space:]]*[,}])"; then
+                    return 0
+                fi
+            done
+
+            return 1
+        }
         resolve_target_am() {
             local primary_am="${ACFS_BIN_DIR:-$HOME/.local/bin}/am"
             local candidate=""
@@ -6637,8 +6653,7 @@ NTM_CONFIG_EOF
             systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1
         fi
         agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1
-        readiness_body="$(agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null)"
-        printf "%s\n" "$readiness_body" | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\""
+        agent_mail_readiness_ready
         '; then
             log_success "MCP Agent Mail service already running on http://127.0.0.1:8765"
             am_service_ready=true
@@ -6656,7 +6671,7 @@ NTM_CONFIG_EOF
                 if [[ -n "$ACFS_TMP_INSTALL" ]] && verify_checksum "$url" "$expected_sha256" "$tool" > "$ACFS_TMP_INSTALL"; then
                     chmod 755 "$ACFS_TMP_INSTALL" 2>/dev/null || true
 
-                    if try_step "Installing MCP Agent Mail" run_as_target env "AM_INSTALL_SKIP_MCP_SETUP=1" bash "$ACFS_TMP_INSTALL" --dest "$target_dir" --yes; then
+                    if try_step "Installing MCP Agent Mail" run_as_target env "AM_INSTALL_SKIP_MCP_SETUP=1" "AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1" bash "$ACFS_TMP_INSTALL" --dest "$target_dir" --yes; then
                     # Symlink repair/normalization: prefer the freshly installed
                     # Rust CLI even if an older am is already on PATH.
                     run_as_target env "ACFS_AGENT_MAIL_TARGET_DIR=$target_dir" bash -c '
@@ -6701,6 +6716,22 @@ NTM_CONFIG_EOF
 
                             [[ -n "$curl_bin" ]] || return 127
                             "$curl_bin" "$@"
+                        }
+                        agent_mail_readiness_ready() {
+                            local readiness_body=""
+                            local readiness_url=""
+
+                            for readiness_url in \
+                                http://127.0.0.1:8765/health/readiness \
+                                http://127.0.0.1:8765/health
+                            do
+                                readiness_body="$(agent_mail_service_curl -fsS --max-time 5 "$readiness_url" 2>/dev/null)" || continue
+                                if printf "%s\n" "$readiness_body" | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\"([[:space:]]*[,}])"; then
+                                    return 0
+                                fi
+                            done
+
+                            return 1
                         }
                         sqlite_user_table_count() {
                             local db_path="$1"
@@ -6827,7 +6858,6 @@ Environment=$rust_log_env
 Environment=$storage_root_env
 Environment=$database_url_env
 Environment=$http_allow_env
-ExecStartPre=${am_bin_exec} migrate
 ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}
 Restart=always
 RestartSec=5
@@ -6883,7 +6913,7 @@ UNIT_EOF
                         else
                             existing_pid=""
                             if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                               agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\""; then
+                               agent_mail_readiness_ready; then
                                 :
                             elif [[ -f "$fallback_pid_file" ]]; then
                                 existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
@@ -6904,32 +6934,41 @@ UNIT_EOF
                                     rm -f "$fallback_pid_file"
                                 fi
                             fi
-                            if env \
+                            nohup env \
                                 RUST_LOG=info \
                                 STORAGE_ROOT="$storage_root" \
                                 DATABASE_URL="$db_url" \
                                 HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
-                                "$am_bin" migrate >>"$fallback_log_file" 2>&1; then
-                                nohup env \
-                                    RUST_LOG=info \
-                                    STORAGE_ROOT="$storage_root" \
-                                    DATABASE_URL="$db_url" \
-                                    HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
-                                    "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
-                                    >>"$fallback_log_file" 2>&1 < /dev/null &
-                                echo $! > "$fallback_pid_file"
-                            fi
+                                "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
+                                >>"$fallback_log_file" 2>&1 < /dev/null &
+                            echo $! > "$fallback_pid_file"
                         fi
                     '; then
                         local am_waited=0
-                        local am_max_wait=90
+                        local am_max_wait=240
                         local am_health_curl=""
                         am_health_curl="$(acfs_early_system_binary_path curl 2>/dev/null || true)"
                         if [[ -z "$am_health_curl" ]]; then
                             log_error "MCP Agent Mail installed but curl is unavailable for local health checks"
                         else
+                            am_readiness_ready() {
+                                local readiness_body=""
+                                local readiness_url=""
+
+                                for readiness_url in \
+                                    http://127.0.0.1:8765/health/readiness \
+                                    http://127.0.0.1:8765/health
+                                do
+                                    readiness_body="$("$am_health_curl" -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+                                    if printf "%s\n" "$readiness_body" | grep -Eq "\"status\"[[:space:]]*:[[:space:]]*\"ready\"([[:space:]]*[,}])"; then
+                                        return 0
+                                    fi
+                                done
+
+                                return 1
+                            }
                             until "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                                  "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; do
+                                  am_readiness_ready; do
                                 if [[ "$am_waited" -ge "$am_max_wait" ]]; then
                                     log_error "MCP Agent Mail service did not become ready on http://127.0.0.1:8765 after ${am_max_wait}s"
                                     break
@@ -6938,7 +6977,7 @@ UNIT_EOF
                                 am_waited=$((am_waited + 2))
                             done
                             if "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-                               "$am_health_curl" -fsS --max-time 10 http://127.0.0.1:8765/health/readiness 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                               am_readiness_ready; then
                                 log_success "MCP Agent Mail service running on http://127.0.0.1:8765"
                                 am_service_ready=true
                             else

@@ -2362,12 +2362,22 @@ update_run_in_target_context() {
     }
 
     local sanitized_acfs_home=""
+    local env_assignment=""
     local -a env_args=("UV_NO_CONFIG=1" "HOME=$target_home" "PATH=$target_path")
     [[ -n "$target_user" ]] && env_args+=("TARGET_USER=$target_user")
     [[ -n "$target_home" ]] && env_args+=("TARGET_HOME=$target_home")
     sanitized_acfs_home="$(update_sanitize_abs_nonroot_path "${ACFS_HOME:-}" 2>/dev/null || true)"
     [[ -n "$sanitized_acfs_home" ]] && env_args+=("ACFS_HOME=$sanitized_acfs_home")
-    [[ -n "$bash_env_assignment" ]] && env_args+=("$bash_env_assignment")
+    if [[ -n "$bash_env_assignment" ]]; then
+        while IFS= read -r env_assignment || [[ -n "$env_assignment" ]]; do
+            [[ -n "$env_assignment" ]] || continue
+            if [[ ! "$env_assignment" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                echo "Invalid target context env assignment: $env_assignment" >&2
+                return 1
+            fi
+            env_args+=("${BASH_REMATCH[1]}=${BASH_REMATCH[2]}")
+        done <<< "$bash_env_assignment"
+    fi
 
     local env_bin=""
     local sh_bin=""
@@ -3334,7 +3344,7 @@ update_sync_known_installer_urls_from_checksums() {
 
 update_required_checksum_tools() {
     printf '%s\n' \
-        apr asb atuin br brenner_bot bun bv caam casr cass claude cm csctf dcg dsr \
+        antigravity apr asb atuin br brenner_bot bun bv caam casr cass claude cm csctf dcg dsr \
         fsfs gemini_patch giil jfp mcp_agent_mail mdwb ms ntm nvm ohmyzsh opencode \
         pcr pt rano rch ru rust s2p sbh slb srps tru ubs uv xf zoxide
 }
@@ -3900,14 +3910,17 @@ update_run_verified_installer_with_env() {
     fi
 
     if [[ -n "$bash_env_assignment" ]]; then
-        if [[ "$bash_env_assignment" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-            local env_name="${BASH_REMATCH[1]}"
-            local env_value="${BASH_REMATCH[2]}"
-            bash_env_assignment="${env_name}=${env_value}"
-        else
-            echo "Invalid inline env assignment for $tool installer: $bash_env_assignment" >&2
-            return 1
-        fi
+        local env_assignment=""
+        local normalized_env_assignment=""
+        while IFS= read -r env_assignment || [[ -n "$env_assignment" ]]; do
+            [[ -n "$env_assignment" ]] || continue
+            if [[ ! "$env_assignment" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                echo "Invalid inline env assignment for $tool installer: $env_assignment" >&2
+                return 1
+            fi
+            normalized_env_assignment+="${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"$'\n'
+        done <<< "$bash_env_assignment"
+        bash_env_assignment="${normalized_env_assignment%$'\n'}"
     fi
 
     local tmp_install=""
@@ -5814,7 +5827,7 @@ update_stack() {
                         rm -f "$tmp_install" 2>/dev/null || true
                         tmp_install=""
                         update_finish_cmd_fail "MCP Agent Mail" "$target_context_error"
-                    elif update_run_logged_passthrough update_run_in_target_context "AM_INSTALL_SKIP_MCP_SETUP=1" bash "$tmp_install" --dest "$target_home/mcp_agent_mail" --yes; then
+                    elif update_run_logged_passthrough update_run_in_target_context $'AM_INSTALL_SKIP_MCP_SETUP=1\nAM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1' bash "$tmp_install" --dest "$target_home/mcp_agent_mail" --yes; then
                         if update_source_stack_lib; then
                             ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$target_user" TARGET_HOME="$target_home" _stack_repair_agent_mail_cli_symlink >/dev/null 2>&1 || true
                         fi
@@ -5893,8 +5906,10 @@ update_stack() {
     # RU (Repo Updater) - always install/update
     run_cmd "RU" update_run_verified_installer_with_env ru "RU_NON_INTERACTIVE=1"
 
-    # DCG (Destructive Command Guard) - always install/update
-    run_cmd "DCG" update_run_verified_installer dcg --easy-mode
+    # DCG (Destructive Command Guard) - always install/update, but do not
+    # report a transient installer/network failure when an existing dcg remains
+    # usable and versionable.
+    update_run_verified_installer_or_existing_on_transient "DCG" dcg dcg dcg --easy-mode || true
     # Re-register hook after install/update to ensure latest version is active
     if update_binary_exists dcg && update_binary_exists claude; then
         local dcg_bin=""

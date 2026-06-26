@@ -2348,6 +2348,40 @@ EOF
     return 0
 }
 
+test_doctor_fix_build_runtime_env_args_accepts_multiple_env_assignments() {
+    setup_test_env
+    export TARGET_HOME="$ACFS_STATE_DIR/target-home"
+    mkdir -p "$TARGET_HOME/.local/bin"
+
+    local -a env_args=()
+    if ! doctor_fix_build_runtime_env_args env_args $'FIRST_ENV=one\nSECOND_ENV=two words'; then
+        echo "  runtime env builder should accept newline-separated installer env assignments"
+        cleanup_test_env
+        return 1
+    fi
+
+    if [[ " ${env_args[*]} " != *" TARGET_HOME=$TARGET_HOME "* ]]; then
+        echo "  runtime env args should include TARGET_HOME"
+        cleanup_test_env
+        return 1
+    fi
+
+    if [[ " ${env_args[*]} " != *" FIRST_ENV=one "* ]]; then
+        echo "  runtime env args should include FIRST_ENV"
+        cleanup_test_env
+        return 1
+    fi
+
+    if [[ " ${env_args[*]} " != *" SECOND_ENV=two words "* ]]; then
+        echo "  runtime env args should include SECOND_ENV with spaces preserved"
+        cleanup_test_env
+        return 1
+    fi
+
+    cleanup_test_env
+    return 0
+}
+
 test_fix_verified_install_ignores_gcloud_bv_shadow() {
     setup_test_env
     mkdir -p "$HOME/google-cloud-sdk/bin" "$HOME/.local/bin"
@@ -3082,8 +3116,8 @@ EOF
         return 1
     fi
 
-    if ! grep -Fq 'Environment="HTTP_PATH=/mcp/"' "$TARGET_HOME/.config/systemd/user/agent-mail.service"; then
-        echo "  Agent Mail unit did not use the Rust /mcp/ endpoint"
+    if ! grep -Fq 'Environment="HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true"' "$TARGET_HOME/.config/systemd/user/agent-mail.service"; then
+        echo "  Agent Mail unit did not allow localhost unauthenticated HTTP"
         cleanup_test_env
         return 1
     fi
@@ -3122,7 +3156,7 @@ EOF
 
     local unit_file="$TARGET_HOME/.config/systemd/user/agent-mail.service"
     local storage_root="$TARGET_HOME/.mcp_agent_mail_git_mailbox_repo"
-    local db_url="sqlite+aiosqlite:///${storage_root}/storage.sqlite3"
+    local db_url="sqlite:///${storage_root}/storage.sqlite3"
     local expected_working_dir=""
     local expected_storage_env=""
     local expected_db_env=""
@@ -3153,8 +3187,14 @@ EOF
         return 1
     fi
 
-    if ! grep -Fxq "ExecStart=${expected_am_bin} serve-http --host 127.0.0.1 --port 8765 --path ${expected_mcp_path} --no-auth --no-tui" "$unit_file"; then
+    if ! grep -Fxq "ExecStart=${expected_am_bin} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${expected_mcp_path}" "$unit_file"; then
         echo "  Agent Mail unit did not quote ExecStart arguments for systemd"
+        cleanup_test_env
+        return 1
+    fi
+
+    if grep -Fq "ExecStartPre=" "$unit_file"; then
+        echo "  Agent Mail unit should not block serve-http startup behind a pre-start migration"
         cleanup_test_env
         return 1
     fi
@@ -3824,6 +3864,7 @@ main() {
     run_test test_fix_verified_install_uses_target_runtime_home
     run_test test_fix_verified_install_dry_run
     run_test test_dispatch_fix_routes_cass_with_target_tmpdir
+    run_test test_doctor_fix_build_runtime_env_args_accepts_multiple_env_assignments
     run_test test_fix_verified_install_ignores_gcloud_bv_shadow
     run_test test_fix_verified_install_ms_arm64_fallback_uses_cargo
     run_test test_fix_verified_install_removes_binary_when_record_change_fails

@@ -2133,7 +2133,7 @@ check_agent_path_conflicts() {
 check_dcg_hook_status() {
     if ! doctor_binary_exists "dcg"; then
         check "stack.dcg" "DCG" "warn" "not installed" \
-            "Re-run: curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/destructive_command_guard/main/install.sh | bash && dcg install"
+            "Re-run: acfs update --stack-only && dcg install --force"
         return
     fi
 
@@ -2360,13 +2360,33 @@ check_stack() {
         local curl_bin=""
         local id_bin=""
         local systemctl_bin=""
+        local am_live=false
+        local am_ready=false
+        local am_readiness_body=""
+        local am_readiness_url=""
 
         am_version=$(get_version_line "$am_bin")
         am_label="MCP Agent Mail ($am_version)"
         curl_bin="$(_acfs_doctor_system_binary_path curl 2>/dev/null || true)"
 
-        if [[ -z "$curl_bin" ]] || ! "$curl_bin" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+        if [[ -n "$curl_bin" ]] && "$curl_bin" -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+            am_live=true
+            for am_readiness_url in \
+                http://127.0.0.1:8765/health/readiness \
+                http://127.0.0.1:8765/health
+            do
+                am_readiness_body="$("$curl_bin" -fsS --max-time 10 "$am_readiness_url" 2>/dev/null)" || continue
+                if printf '%s\n' "$am_readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                    am_ready=true
+                    break
+                fi
+            done
+        fi
+
+        if [[ "$am_live" != "true" ]]; then
             check "stack.mcp_agent_mail" "$am_label" "warn" "installed but service is not running" "$am_install_fix"
+        elif [[ "$am_ready" != "true" ]]; then
+            check "stack.mcp_agent_mail" "$am_label" "warn" "service is running but not ready" "$am_install_fix"
         elif {
             id_bin="$(_acfs_doctor_system_binary_path id 2>/dev/null || true)"
             systemctl_bin="$(_acfs_doctor_system_binary_path systemctl 2>/dev/null || true)"

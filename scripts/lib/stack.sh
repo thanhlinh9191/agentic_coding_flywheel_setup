@@ -650,8 +650,19 @@ _stack_agent_mail_liveness() {
 
 _stack_agent_mail_readiness() {
     local readiness_body=""
-    readiness_body="$(_stack_system_curl -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null)" || return 1
-    printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'
+    local readiness_url=""
+
+    for readiness_url in \
+        http://127.0.0.1:8765/health/readiness \
+        http://127.0.0.1:8765/health
+    do
+        readiness_body="$(_stack_system_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+        if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 # Run a command as target user
@@ -746,7 +757,7 @@ _stack_require_security() {
 
 # Run an installer script as target user with checksum verification.
 # Some upstream installers use environment variables instead of CLI flags for
-# non-interactive mode, so allow one optional inline env assignment like VAR=value.
+# non-interactive mode, so allow newline-separated env assignments like VAR=value.
 _stack_run_verified_installer_with_env() {
     if [[ $# -lt 1 ]]; then
         log_warn "_stack_run_verified_installer_with_env requires at least a tool name"
@@ -779,16 +790,19 @@ _stack_run_verified_installer_with_env() {
     fi
     local env_assignment_rendered=""
     if [[ -n "$bash_env_assignment" ]]; then
-        if [[ "$bash_env_assignment" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+        local env_assignment=""
+        while IFS= read -r env_assignment || [[ -n "$env_assignment" ]]; do
+            [[ -n "$env_assignment" ]] || continue
+            if [[ ! "$env_assignment" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+                log_warn "Invalid inline env assignment for $tool installer: $env_assignment"
+                return 1
+            fi
             local env_name="${BASH_REMATCH[1]}"
             local env_value="${BASH_REMATCH[2]}"
             local env_value_q=""
             printf -v env_value_q '%q' "$env_value"
-            env_assignment_rendered="${env_name}=${env_value_q}"
-        else
-            log_warn "Invalid inline env assignment for $tool installer: $bash_env_assignment"
-            return 1
-        fi
+            env_assignment_rendered+="${env_name}=${env_value_q} "
+        done <<< "$bash_env_assignment"
     fi
 
     local -a quoted_args=()
@@ -808,7 +822,7 @@ _stack_run_verified_installer_with_env() {
 
     local cmd="set -o pipefail; source $security_lib_q; verify_checksum $url_q $expected_sha256_q $tool_q | "
     if [[ -n "$env_assignment_rendered" ]]; then
-        cmd+="$env_assignment_rendered "
+        cmd+="$env_assignment_rendered"
     fi
     cmd+="bash -s --"
     if [[ ${#quoted_args[@]} -gt 0 ]]; then
@@ -1101,8 +1115,17 @@ if ! stack_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness
     exit 1
 fi
 
-readiness_body="\$(stack_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health 2>/dev/null)" || exit 1
-printf '%s\n' "\$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])' || exit 1
+for readiness_url in \
+    http://127.0.0.1:8765/health/readiness \
+    http://127.0.0.1:8765/health
+do
+    readiness_body="\$(stack_service_curl -fsS --max-time 10 "\$readiness_url" 2>/dev/null)" || continue
+    if printf '%s\n' "\$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+        readiness_ok=true
+        break
+    fi
+done
+[[ "\${readiness_ok:-false}" == "true" ]] || exit 1
 
 runtime_dir="/run/user/\$(id -u)"
 if [[ -d "\$runtime_dir" ]]; then
@@ -1436,7 +1459,6 @@ Environment=$rust_log_env
 Environment=$storage_root_env
 Environment=$database_url_env
 Environment=$http_allow_env
-ExecStartPre=${am_bin_exec} migrate
 ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}
 Restart=always
 RestartSec=5
@@ -1481,7 +1503,7 @@ launch_agent_mail_fallback() {
     if {
         stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 || \
         stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/healthz >/dev/null 2>&1;
-    } && stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+    } && agent_mail_readiness_ready; then
         return 0
     fi
 
@@ -1500,22 +1522,12 @@ launch_agent_mail_fallback() {
         STORAGE_ROOT="$storage_root" \
         DATABASE_URL="$db_url" \
         HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
-        "$am_bin" migrate \
-        >>"$fallback_log_file" 2>&1 < /dev/null || true
-
-    nohup env \
-        RUST_LOG=info \
-        STORAGE_ROOT="$storage_root" \
-        DATABASE_URL="$db_url" \
-        HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
         "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
         >>"$fallback_log_file" 2>&1 < /dev/null &
     echo $! > "$fallback_pid_file"
 }
 
 agent_mail_endpoint_ready() {
-    local readiness_body=""
-
     if ! {
         stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 || \
         stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/healthz >/dev/null 2>&1;
@@ -1523,18 +1535,27 @@ agent_mail_endpoint_ready() {
         return 1
     fi
 
-    readiness_body="$(stack_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health 2>/dev/null)" || return 1
-    printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'
+    agent_mail_readiness_ready
+}
+
+agent_mail_readiness_ready() {
+    local readiness_body=""
+    local readiness_url=""
+
+    for readiness_url in \
+        http://127.0.0.1:8765/health/readiness \
+        http://127.0.0.1:8765/health
+    do
+        readiness_body="$(stack_service_curl -fsS --max-time 5 "$readiness_url" 2>/dev/null)" || continue
+        if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
-    if agent_mail_endpoint_ready && ! systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1; then
-        systemctl --user stop agent-mail.service >/dev/null 2>&1 || true
-        systemctl --user reset-failed agent-mail.service >/dev/null 2>&1 || true
-        echo "Agent Mail: healthy existing runtime detected; skipping managed service restart" >&2
-        exit 0
-    fi
-
     stop_agent_mail_fallback
     systemctl --user daemon-reload >/dev/null 2>&1 || true
     if ! systemctl --user enable --now agent-mail.service >/dev/null 2>&1; then
@@ -1680,7 +1701,7 @@ install_mcp_agent_mail() {
         # installer also tries to configure MCP clients and start its own user
         # service when Codex/Claude configs exist, which can fail on fresh VPS
         # images before ACFS has normalized the service environment.
-        if ! _stack_run_verified_installer_with_env "$tool" "AM_INSTALL_SKIP_MCP_SETUP=1" --dest "$target_dir" --yes; then
+        if ! _stack_run_verified_installer_with_env "$tool" $'AM_INSTALL_SKIP_MCP_SETUP=1\nAM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1' --dest "$target_dir" --yes; then
             log_warn "${STACK_NAMES[$tool]} installation may have failed"
             return 1
         fi

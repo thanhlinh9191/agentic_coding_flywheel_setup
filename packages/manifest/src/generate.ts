@@ -302,9 +302,9 @@ if [[ "\${BASH_SOURCE[0]}" = "\${0}" ]]; then
     # installers (uv/rust/bun) write into it. uv installs via an atomic
     # mktemp+rename inside ~/.local/bin, so a root-owned ~/.local/bin makes its
     # mktemp fail with "Permission denied (os error 13)" once the installer is
-    # re-exec'd as the (non-root) target user. The chown is NON-recursive on
-    # purpose — only the two directories themselves, never their contents (never
-    # chown -R ~/.local, which would clobber ownership of unrelated state).
+    # re-exec'd as the (non-root) target user. The ownership repair is
+    # deliberately non-recursive: only the two directories themselves are
+    # touched, never their contents.
     if [[ \$EUID -eq 0 ]] && [[ -n "\${TARGET_USER:-}" ]] && [[ "\${TARGET_USER}" != "root" ]]; then
         _acfs_repair_mkdir="\$(_acfs_system_binary_path mkdir 2>/dev/null || true)"
         _acfs_repair_chown="\$(_acfs_system_binary_path chown 2>/dev/null || true)"
@@ -2178,12 +2178,12 @@ function generateDoctorChecks(manifest: Manifest): string {
 }
 
 /**
- * Generate master installer script
+ * Generate top-level installer script
  */
 function generateMasterInstaller(manifest: Manifest): string {
   const categories = getCategories(manifest);
   const lines: string[] = [HEADER];
-  lines.push('# Master installer - sources all category scripts');
+  lines.push('# Top-level installer - sources all category scripts');
   lines.push('');
 
   // Source all category scripts
@@ -2843,7 +2843,7 @@ async function main(): Promise<void> {
     filesToGenerate.set(filepath, { content, mode: 0o755 });
   }
 
-  // Master installer
+  // Top-level installer
   {
     const filepath = join(OUTPUT_DIR, 'install_all.sh');
     const content = generateMasterInstaller(manifest);

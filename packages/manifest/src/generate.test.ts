@@ -286,6 +286,8 @@ describe('Generated verified installer args', () => {
     expect(stackContent).not.toContain('${HOME:-/home/${TARGET_USER:-ubuntu}}');
     expect(stackContent).toContain('"$TARGET_HOME"');
     expect(stackContent).toContain("'/mcp_agent_mail'");
+    expect(stackContent).toContain("'AM_INSTALL_SKIP_MCP_SETUP=1'");
+    expect(stackContent).toContain("'AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1'");
   });
 
   test('stack.mcp_agent_mail writes an explicit managed no-auth service instead of tmux', () => {
@@ -304,9 +306,12 @@ describe('Generated verified installer args', () => {
       'ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}'
     );
     expect(stackContent).not.toContain('Environment=STORAGE_ROOT=$storage_root');
+    expect(stackContent).not.toContain('ExecStartPre=${am_bin_exec} migrate');
     expect(stackContent).not.toContain('ExecStart=$am_bin serve-http');
     expect(stackContent).toContain('systemctl --user enable --now agent-mail.service');
     expect(stackContent).toContain('curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null');
+    expect(stackContent).toContain('http://127.0.0.1:8765/health/readiness');
+    expect(stackContent).toContain('max_wait=240');
     expect(stackContent).not.toContain('am service install >/dev/null');
     expect(stackContent).not.toContain('tmux new-session -d -s "$tmux_session"');
   });
@@ -436,6 +441,7 @@ describe('Generated verified installer args', () => {
     const stackContent = readFileSync(stackPath, 'utf-8');
 
     expect(stackContent).toContain('claude_settings_has_command_hook() {');
+    expect(stackContent).toContain('dcg install --force');
     expect(stackContent).toContain("dcg_command_pattern='(^|[[:space:]/])dcg([[:space:]]|$)'");
     expect(stackContent).toContain(
       "pcr_command_pattern='(^|[[:space:]/])claude-post-compact-reminder([[:space:]]|$)'"
@@ -455,7 +461,7 @@ describe('Generated verified installer args', () => {
       'install command failed: # Wait for the managed Agent Mail service to become healthy.'
     );
     expect(stackContent).toContain(
-      'install command failed: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do'
+      'install command failed: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \\\\'
     );
   });
 

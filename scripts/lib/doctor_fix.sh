@@ -868,16 +868,21 @@ doctor_fix_build_runtime_env_args() {
         return 1
     }
 
-    doctor_fix_parse_env_assignment "$extra_env_assignment" env_name env_value || return $?
-
     _env_args_ref=(
         "TARGET_USER=$runtime_user" \
         "TARGET_HOME=$runtime_home" \
         "HOME=$runtime_home" \
         "PATH=$runtime_path"
     )
-    if [[ -n "$env_name" ]]; then
-        _env_args_ref+=("$env_name=$env_value")
+    if [[ -n "$extra_env_assignment" ]]; then
+        local env_assignment=""
+        while IFS= read -r env_assignment || [[ -n "$env_assignment" ]]; do
+            [[ -n "$env_assignment" ]] || continue
+            doctor_fix_parse_env_assignment "$env_assignment" env_name env_value || return $?
+            if [[ -n "$env_name" ]]; then
+                _env_args_ref+=("$env_name=$env_value")
+            fi
+        done <<< "$extra_env_assignment"
     fi
 }
 
@@ -2251,6 +2256,23 @@ agent_mail_fix_wait_for_health() {
     ACFS_STACK_TRUST_TARGET_HOME=true TARGET_USER="$(doctor_fix_runtime_user)" TARGET_HOME="$(doctor_fix_runtime_home)" _stack_wait_for_agent_mail_health
 }
 
+agent_mail_fix_readiness_ready() {
+    local readiness_body=""
+    local readiness_url=""
+
+    for readiness_url in \
+        http://127.0.0.1:8765/health/readiness \
+        http://127.0.0.1:8765/health
+    do
+        readiness_body="$(doctor_fix_system_curl -fsS --max-time 5 "$readiness_url" 2>/dev/null)" || continue
+        if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 agent_mail_fix_write_unit() {
     local runtime_home=""
     runtime_home="$(doctor_fix_runtime_home)"
@@ -2263,14 +2285,14 @@ agent_mail_fix_write_unit() {
     local rust_log_env=""
     local storage_root_env=""
     local database_url_env=""
-    local http_path_env=""
+    local http_allow_env=""
     local am_bin_exec=""
     local am_mcp_path_exec=""
 
     am_bin="$(doctor_fix_agent_mail_bin 2>/dev/null || true)"
     [[ -n "$am_bin" ]] || return 1
 
-    db_url="sqlite+aiosqlite:///${storage_root}/storage.sqlite3"
+    db_url="sqlite:///${storage_root}/storage.sqlite3"
 
     local am_mcp_path=""
     am_mcp_path="$(doctor_fix_agent_mail_mcp_path "$am_bin" 2>/dev/null || true)"
@@ -2281,7 +2303,7 @@ agent_mail_fix_write_unit() {
     rust_log_env="$(doctor_fix_systemd_unit_env_assignment RUST_LOG info)" || return 1
     storage_root_env="$(doctor_fix_systemd_unit_env_assignment STORAGE_ROOT "$storage_root")" || return 1
     database_url_env="$(doctor_fix_systemd_unit_env_assignment DATABASE_URL "$db_url")" || return 1
-    http_path_env="$(doctor_fix_systemd_unit_env_assignment HTTP_PATH "$am_mcp_path")" || return 1
+    http_allow_env="$(doctor_fix_systemd_unit_env_assignment HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED true)" || return 1
     am_bin_exec="$(doctor_fix_systemd_unit_exec_command "$am_bin")" || return 1
     am_mcp_path_exec="$(doctor_fix_systemd_unit_exec_arg "$am_mcp_path")" || return 1
     cat > "$unit_file" <<UNIT_EOF
@@ -2295,8 +2317,8 @@ WorkingDirectory=$storage_root_unit
 Environment=$rust_log_env
 Environment=$storage_root_env
 Environment=$database_url_env
-Environment=$http_path_env
-ExecStart=${am_bin_exec} serve-http --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec} --no-auth --no-tui
+Environment=$http_allow_env
+ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
@@ -2317,13 +2339,14 @@ agent_mail_fix_launch_fallback() {
     am_bin="$(doctor_fix_agent_mail_bin 2>/dev/null || true)"
     [[ -n "$am_bin" ]] || return 1
 
-    db_url="sqlite+aiosqlite:///${storage_root}/storage.sqlite3"
+    db_url="sqlite:///${storage_root}/storage.sqlite3"
 
     local am_mcp_path=""
     am_mcp_path="$(doctor_fix_agent_mail_mcp_path "$am_bin" 2>/dev/null || true)"
     [[ -n "$am_mcp_path" ]] || return 1
 
-    if doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+    if doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+       agent_mail_fix_readiness_ready; then
         return 0
     fi
 
@@ -2331,17 +2354,18 @@ agent_mail_fix_launch_fallback() {
         existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
         if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null && \
            ps -p "$existing_pid" -o args= 2>/dev/null | grep -Fq "$am_bin serve-http"; then
-            return 0
+            agent_mail_fix_stop_fallback
+        else
+            rm -f "$fallback_pid_file"
         fi
-        rm -f "$fallback_pid_file"
     fi
 
     nohup env \
         RUST_LOG=info \
         STORAGE_ROOT="$storage_root" \
         DATABASE_URL="$db_url" \
-        HTTP_PATH="$am_mcp_path" \
-        "$am_bin" serve-http --host 127.0.0.1 --port 8765 --path "$am_mcp_path" --no-auth --no-tui \
+        HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
+        "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
         >>"$fallback_log_file" 2>&1 < /dev/null &
     echo $! > "$fallback_pid_file"
 }
@@ -2459,12 +2483,12 @@ fix_mcp_agent_mail() {
 
     if [[ -z "$am_bin" ]]; then
         if [[ "$DOCTOR_FIX_DRY_RUN" == "true" ]]; then
-            FIXES_DRY_RUN+=("fix.stack.mcp_agent_mail|Install MCP Agent Mail via verified installer, then repair service state|$runtime_home/mcp_agent_mail|verified:mcp_agent_mail --dest $runtime_home/mcp_agent_mail --yes")
+            FIXES_DRY_RUN+=("fix.stack.mcp_agent_mail|Install MCP Agent Mail via verified installer, then repair service state|$runtime_home/mcp_agent_mail|verified:mcp_agent_mail AM_INSTALL_SKIP_MCP_SETUP=1 AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1 --dest $runtime_home/mcp_agent_mail --yes")
             doctor_fix_log DRY "Install MCP Agent Mail via verified installer, then repair service state"
             return 0
         fi
 
-        if doctor_fix_run_verified_installer "mcp_agent_mail" --dest "$runtime_home/mcp_agent_mail" --yes >/dev/null 2>&1; then
+        if doctor_fix_run_verified_installer_with_env "mcp_agent_mail" $'AM_INSTALL_SKIP_MCP_SETUP=1\nAM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1' --dest "$runtime_home/mcp_agent_mail" --yes >/dev/null 2>&1; then
             local installed_cli=""
             local installed_cli_target=""
             local am_src_target=""
@@ -2558,7 +2582,7 @@ fix_mcp_agent_mail() {
     fi
 
     if doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
-       doctor_fix_system_curl -fsS --max-time 5 http://127.0.0.1:8765/health >/dev/null 2>&1; then
+       agent_mail_fix_readiness_ready; then
         service_healthy=true
     fi
 

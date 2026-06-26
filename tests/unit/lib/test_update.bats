@@ -1366,10 +1366,16 @@ EOF
     run grep -F 'update_run_verified_installer_or_existing_on_transient "CASS Memory" cm cm cm --easy-mode --verify || true' "$update"
     assert_success
 
+    run grep -F 'update_run_verified_installer_or_existing_on_transient "DCG" dcg dcg dcg --easy-mode || true' "$update"
+    assert_success
+
     run grep -F 'run_cmd "Meta Skill" update_run_verified_installer ms --easy-mode' "$update"
     assert_failure
 
     run grep -F 'run_cmd "CASS Memory" update_run_verified_installer cm --easy-mode --verify' "$update"
+    assert_failure
+
+    run grep -F 'run_cmd "DCG" update_run_verified_installer dcg --easy-mode' "$update"
     assert_failure
 
     run grep -F 'run_cmd "Supabase CLI" update_run_in_target_context "ACFS_PRIMARY_BIN_DIR=$supabase_primary_bin" bash -c "$(supabase_release_update_script)"' "$update"
@@ -1569,7 +1575,12 @@ EOF
 
     run update_stack
     assert_success
-    [[ "$(cat "$HOME/mcp-agent-mail-passthrough.args")" == "update_run_in_target_context AM_INSTALL_SKIP_MCP_SETUP=1 bash "* ]]
+    local passthrough_args
+    passthrough_args="$(cat "$HOME/mcp-agent-mail-passthrough.args")"
+    [[ "$passthrough_args" == update_run_in_target_context* ]]
+    [[ "$passthrough_args" == *"AM_INSTALL_SKIP_MCP_SETUP=1"* ]]
+    [[ "$passthrough_args" == *"AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1"* ]]
+    [[ "$passthrough_args" == *"bash "* ]]
     [[ "$(cat "$mode_file")" == "755" ]]
 }
 
@@ -4572,6 +4583,10 @@ esac
 EOF
     cat > "$target_home/.local/bin/acfs-update" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Usage: acfs-update [--no-self-update]'
+  exit 0
+fi
 printf 'REAL_NIGHTLY HOME=%s TARGET_HOME=%s ACFS_HOME=%s\n' "$HOME" "${TARGET_HOME:-}" "${ACFS_HOME:-}"
 EOF
     cat > "$poison_home/.local/bin/acfs-update" <<'EOF'
@@ -4660,6 +4675,10 @@ EOF
 EOF
     cat > "$target_home/.local/bin/acfs-update" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Usage: acfs-update [--no-self-update]'
+  exit 0
+fi
 printf 'CHILD_HOME=%s TARGET_HOME=%s ACFS_HOME=%s\n' "$HOME" "${TARGET_HOME:-}" "${ACFS_HOME:-}"
 EOF
     chmod +x "$target_home/.local/bin/acfs-update"
@@ -4704,6 +4723,10 @@ EOF
 EOF
     cat > "$target_home/.acfs/bin/acfs-update" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Usage: acfs-update [--no-self-update]'
+  exit 0
+fi
 printf 'LIVE_HOME=%s TARGET_HOME=%s ACFS_HOME=%s\n' "$HOME" "${TARGET_HOME:-}" "${ACFS_HOME:-}"
 EOF
     cat > "$stale_home/.local/bin/acfs-update" <<'EOF'
@@ -4754,6 +4777,10 @@ EOF
 EOF
     cat > "$target_home/.acfs/bin/acfs-update" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Usage: acfs-update [--no-self-update]'
+  exit 0
+fi
 printf 'CHILD_HOME=%s TARGET_HOME=%s ACFS_HOME=%s\n' "$HOME" "${TARGET_HOME:-}" "${ACFS_HOME:-}"
 EOF
     chmod +x "$target_home/.acfs/bin/acfs-update"
@@ -4802,6 +4829,10 @@ EOF
 EOF
     cat > "$target_home/.local/bin/acfs-update" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${1:-}" == "--help" ]]; then
+  printf '%s\n' 'Usage: acfs-update [--no-self-update]'
+  exit 0
+fi
 printf 'LIVE_NIGHTLY HOME=%s TARGET_HOME=%s ACFS_HOME=%s\n' "$HOME" "${TARGET_HOME:-}" "${ACFS_HOME:-}"
 EOF
     cat > "$stale_home/.local/bin/acfs-update" <<'EOF'
@@ -6833,7 +6864,9 @@ EOF
 
     run install_mcp_agent_mail
     assert_success
-    [[ "$(cat "$args_file")" == "mcp_agent_mail AM_INSTALL_SKIP_MCP_SETUP=1 --dest $target_home/mcp_agent_mail --yes" ]]
+    grep -Fq "mcp_agent_mail AM_INSTALL_SKIP_MCP_SETUP=1" "$args_file"
+    grep -Fq "AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1" "$args_file"
+    grep -Fq -- "--dest $target_home/mcp_agent_mail --yes" "$args_file"
     [[ -f "$target_home/.configured-agent-mail-service" ]]
     [[ -f "$target_home/.waited-agent-mail-health" ]]
 }
@@ -10023,7 +10056,7 @@ EOF
     assert_success
 
     run grep -F '"$am_bin" migrate >>"$fallback_log_file" 2>&1' "$installer"
-    assert_success
+    assert_failure
 
     run grep -F '"$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path"' "$installer"
     assert_success
@@ -10096,14 +10129,14 @@ EOF
     assert_failure
 }
 
-@test "install.sh: Gemini trusted folders creation JSON-escapes target home" {
+@test "install.sh: retired Gemini trust files are not created" {
     local installer="$PROJECT_ROOT/install.sh"
 
     run grep -F 'jq -n --arg home "$1"' "$installer"
-    assert_success
+    assert_failure
 
     run grep -F '{"/data/projects": "TRUST_FOLDER", ($home): "TRUST_FOLDER"}' "$installer"
-    assert_success
+    assert_failure
 
     run grep -F '{"/data/projects": "TRUST_FOLDER", "$TARGET_HOME": "TRUST_FOLDER"}' "$installer"
     assert_failure
@@ -11416,6 +11449,10 @@ EOF_DCG_CONFIG_TRUSTED_HELPERS
     refute_output --partial "TEST_ENV=ok;touch /tmp/acfs-pwned"
     assert_output --partial "set -o pipefail; source /tmp/acfs\\ stack\\'s\\ dir/security.sh"
     assert_output --partial "bash -s -- --flag"
+
+    run _stack_run_verified_installer_with_env "test_tool" $'FIRST_ENV=one\nSECOND_ENV=two words' "--flag"
+    assert_success
+    assert_output --partial "FIRST_ENV=one SECOND_ENV=two\\ words bash -s -- --flag"
 }
 
 @test "stack verified installer command fails when checksum verifier fails" {
@@ -11472,6 +11509,9 @@ SECURITY
 
     run grep -F 'ExecStart=${am_bin_exec} serve-http' "$stack_lib"
     assert_success
+
+    run grep -F 'ExecStartPre=${am_bin_exec} migrate' "$stack_lib"
+    assert_failure
 }
 
 @test "install.sh Agent Mail unit escapes dynamic systemd values" {
@@ -11503,21 +11543,30 @@ SECURITY
 
     run grep -F 'ExecStart=${am_bin_exec} serve-http' "$installer"
     assert_success
+
+    run grep -F 'ExecStartPre=${am_bin_exec} migrate' "$installer"
+    assert_failure
 }
 
-@test "stack Agent Mail service accepts a healthy existing runtime" {
+@test "stack Agent Mail service migrates fallback runtime to managed service" {
     local stack_lib="$PROJECT_ROOT/scripts/lib/stack.sh"
 
     run grep -F 'agent_mail_endpoint_ready() {' "$stack_lib"
     assert_success
 
     run grep -F 'if agent_mail_endpoint_ready && ! systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1; then' "$stack_lib"
-    assert_success
+    assert_failure
 
     run grep -F 'systemctl --user reset-failed agent-mail.service >/dev/null 2>&1 || true' "$stack_lib"
-    assert_success
+    assert_failure
 
     run grep -F 'healthy existing runtime detected; skipping managed service restart' "$stack_lib"
+    assert_failure
+
+    run grep -F 'stop_agent_mail_fallback' "$stack_lib"
+    assert_success
+
+    run grep -F 'systemctl --user enable --now agent-mail.service' "$stack_lib"
     assert_success
 }
 
@@ -11542,6 +11591,27 @@ SECURITY
     assert_output --partial "env=TEST_ENV=ok; touch /tmp/acfs pwned"
     assert_output --partial "cmd=bash"
     assert_output --partial "arg=--flag"
+}
+
+@test "update verified installer accepts multiple env assignments" {
+    declare -gA KNOWN_INSTALLERS=([test_tool]="https://example.test/install.sh")
+
+    update_require_security() { return 0; }
+    get_checksum() { printf '%s\n' "abc123"; }
+    verify_checksum() {
+        printf '%s\n' '#!/usr/bin/env bash'
+        printf '%s\n' 'exit 0'
+    }
+    update_run_in_target_context() {
+        printf 'env=%s\n' "$1"
+        printf 'cmd=%s\n' "$2"
+    }
+
+    run update_run_verified_installer_with_env "test_tool" $'FIRST_ENV=one\nSECOND_ENV=two words' "--flag"
+    assert_success
+    assert_output --partial "env=FIRST_ENV=one"
+    assert_output --partial "SECOND_ENV=two words"
+    assert_output --partial "cmd=bash"
 }
 
 @test "update verified installer rejects invalid env assignment names" {
@@ -12945,6 +13015,11 @@ EOF
 
     cat > "$STUB_DIR/curl" <<'EOF'
 #!/usr/bin/env bash
+case "$*" in
+  *"/health/readiness"*|*"/health"*)
+    printf '%s\n' '{"status":"ready"}'
+    ;;
+esac
 exit 0
 EOF
     cat > "$STUB_DIR/id" <<'EOF'
@@ -13872,16 +13947,16 @@ EOF
 }
 
 @test "Agent Mail readiness waits tolerate slow service startup" {
-    run grep -F 'local am_max_wait=90' "$PROJECT_ROOT/install.sh"
+    run grep -F 'local am_max_wait=240' "$PROJECT_ROOT/install.sh"
     assert_success
 
     run grep -F 'active_max_wait=30' "$PROJECT_ROOT/install.sh"
     assert_success
 
-    run grep -F 'local max_wait=90' "$PROJECT_ROOT/scripts/lib/stack.sh"
+    run grep -F 'local max_wait=240' "$PROJECT_ROOT/scripts/lib/stack.sh"
     assert_success
 
-    run grep -F 'max_wait=90' "$PROJECT_ROOT/acfs.manifest.yaml"
+    run grep -F 'max_wait=240' "$PROJECT_ROOT/acfs.manifest.yaml"
     assert_success
 }
 

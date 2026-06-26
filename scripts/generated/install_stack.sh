@@ -260,9 +260,9 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     # installers (uv/rust/bun) write into it. uv installs via an atomic
     # mktemp+rename inside ~/.local/bin, so a root-owned ~/.local/bin makes its
     # mktemp fail with "Permission denied (os error 13)" once the installer is
-    # re-exec'd as the (non-root) target user. The chown is NON-recursive on
-    # purpose — only the two directories themselves, never their contents (never
-    # chown -R ~/.local, which would clobber ownership of unrelated state).
+    # re-exec'd as the (non-root) target user. The ownership repair is
+    # deliberately non-recursive: only the two directories themselves are
+    # touched, never their contents.
     if [[ $EUID -eq 0 ]] && [[ -n "${TARGET_USER:-}" ]] && [[ "${TARGET_USER}" != "root" ]]; then
         _acfs_repair_mkdir="$(_acfs_system_binary_path mkdir 2>/dev/null || true)"
         _acfs_repair_chown="$(_acfs_system_binary_path chown 2>/dev/null || true)"
@@ -461,7 +461,7 @@ install_stack_mcp_agent_mail() {
                     fi
 
                     if [[ -n "$url" ]] && [[ -n "$expected_sha256" ]]; then
-                        if verify_checksum "$url" "$expected_sha256" "$tool" | run_as_target_runner 'env' 'AM_INSTALL_SKIP_MCP_SETUP=1' 'bash' '-s' '--' '--dest' "$TARGET_HOME"'/mcp_agent_mail' '--yes'; then
+                        if verify_checksum "$url" "$expected_sha256" "$tool" | run_as_target_runner 'env' 'AM_INSTALL_SKIP_MCP_SETUP=1' 'AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1' 'bash' '-s' '--' '--dest' "$TARGET_HOME"'/mcp_agent_mail' '--yes'; then
                             install_success=true
                         else
                             log_error "stack.mcp_agent_mail: verify_checksum or installer execution failed"
@@ -581,7 +581,6 @@ Environment=$rust_log_env
 Environment=$storage_root_env
 Environment=$database_url_env
 Environment=$http_allow_env
-ExecStartPre=${am_bin_exec} migrate
 ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}
 Restart=always
 RestartSec=5
@@ -632,6 +631,23 @@ agent_mail_service_curl() {
   "$curl_bin" "$@"
 }
 
+agent_mail_readiness_ready() {
+  local readiness_body=""
+  local readiness_url=""
+
+  for readiness_url in \
+    http://127.0.0.1:8765/health/readiness \
+    http://127.0.0.1:8765/health
+  do
+    readiness_body="$(agent_mail_service_curl -fsS --max-time 5 "$readiness_url" 2>/dev/null)" || continue
+    if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 stop_agent_mail_fallback() {
   if [[ -f "$fallback_pid_file" ]]; then
     existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
@@ -653,7 +669,8 @@ stop_agent_mail_fallback() {
 }
 
 launch_agent_mail_fallback() {
-  if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+  if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+     agent_mail_readiness_ready; then
     return 0
   fi
 
@@ -661,17 +678,18 @@ launch_agent_mail_fallback() {
     existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
     if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null && \
        ps -p "$existing_pid" -o args= 2>/dev/null | grep -Fq "$am_bin serve-http"; then
-      return 0
+      stop_agent_mail_fallback
+    else
+      rm -f "$fallback_pid_file"
     fi
-    rm -f "$fallback_pid_file"
   fi
 
   nohup env \
     RUST_LOG=info \
     STORAGE_ROOT="$storage_root" \
     DATABASE_URL="$db_url" \
-    HTTP_PATH="$am_mcp_path" \
-    "$am_bin" serve-http --host 127.0.0.1 --port 8765 --path "$am_mcp_path" --no-auth --no-tui \
+    HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
+    "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
     >>"$fallback_log_file" 2>&1 < /dev/null &
   echo $! > "$fallback_pid_file"
 }
@@ -703,7 +721,7 @@ INSTALL_STACK_MCP_AGENT_MAIL
         fi
     fi
     if [[ "${DRY_RUN:-false}" = "true" ]]; then
-        log_info "dry-run: install: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do (target_user)"
+        log_info "dry-run: install: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \\ (target_user)"
     else
         if ! run_as_target_shell <<'INSTALL_STACK_MCP_AGENT_MAIL'
 # Wait for the managed Agent Mail service to become healthy.
@@ -721,11 +739,29 @@ agent_mail_service_curl() {
   "$curl_bin" "$@"
 }
 
+agent_mail_readiness_ready() {
+  local readiness_body=""
+  local readiness_url=""
+
+  for readiness_url in \
+    http://127.0.0.1:8765/health/readiness \
+    http://127.0.0.1:8765/health
+  do
+    readiness_body="$(agent_mail_service_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+    if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 waited=0
-max_wait=90
-until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do
+max_wait=240
+until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+      agent_mail_readiness_ready; do
   if [[ "$waited" -ge "$max_wait" ]]; then
-    echo "Agent Mail service did not become healthy on 127.0.0.1:8765 after ${max_wait}s" >&2
+    echo "Agent Mail service did not become ready on 127.0.0.1:8765 after ${max_wait}s" >&2
     exit 1
   fi
   sleep 2
@@ -733,7 +769,7 @@ until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/li
 done
 INSTALL_STACK_MCP_AGENT_MAIL
         then
-            log_error "stack.mcp_agent_mail: install command failed: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do"
+            log_error "stack.mcp_agent_mail: install command failed: until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \\"
             return 1
         fi
     fi
@@ -768,6 +804,23 @@ agent_mail_service_curl() {
   "$curl_bin" "$@"
 }
 
+agent_mail_readiness_ready() {
+  local readiness_body=""
+  local readiness_url=""
+
+  for readiness_url in \
+    http://127.0.0.1:8765/health/readiness \
+    http://127.0.0.1:8765/health
+  do
+    readiness_body="$(agent_mail_service_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+    if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 runtime_dir="/run/user/$(id -u)"
 if [[ -d "$runtime_dir" ]]; then
   export XDG_RUNTIME_DIR="$runtime_dir"
@@ -777,6 +830,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/d
   systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1 || exit 1
 fi
 agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null
+agent_mail_readiness_ready
 INSTALL_STACK_MCP_AGENT_MAIL
         then
             log_error "stack.mcp_agent_mail: verify failed: if [[ -d \"\$runtime_dir\" ]]; then"
@@ -1899,6 +1953,19 @@ install_stack_dcg() {
             fi
         }; then
             log_error "stack.dcg: verified installer failed"
+            return 1
+        fi
+    fi
+    if [[ "${DRY_RUN:-false}" = "true" ]]; then
+        log_info "dry-run: install: if command -v claude >/dev/null 2>&1; then (target_user)"
+    else
+        if ! run_as_target_shell <<'INSTALL_STACK_DCG'
+if command -v claude >/dev/null 2>&1; then
+  dcg install --force
+fi
+INSTALL_STACK_DCG
+        then
+            log_error "stack.dcg: install command failed: if command -v claude >/dev/null 2>&1; then"
             return 1
         fi
     fi

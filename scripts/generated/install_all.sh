@@ -260,9 +260,9 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     # installers (uv/rust/bun) write into it. uv installs via an atomic
     # mktemp+rename inside ~/.local/bin, so a root-owned ~/.local/bin makes its
     # mktemp fail with "Permission denied (os error 13)" once the installer is
-    # re-exec'd as the (non-root) target user. The chown is NON-recursive on
-    # purpose — only the two directories themselves, never their contents (never
-    # chown -R ~/.local, which would clobber ownership of unrelated state).
+    # re-exec'd as the (non-root) target user. The ownership repair is
+    # deliberately non-recursive: only the two directories themselves are
+    # touched, never their contents.
     if [[ $EUID -eq 0 ]] && [[ -n "${TARGET_USER:-}" ]] && [[ "${TARGET_USER}" != "root" ]]; then
         _acfs_repair_mkdir="$(_acfs_system_binary_path mkdir 2>/dev/null || true)"
         _acfs_repair_chown="$(_acfs_system_binary_path chown 2>/dev/null || true)"
@@ -339,7 +339,7 @@ acfs_security_init() {
     return 0
 }
 
-# Master installer - sources all category scripts
+# Top-level installer - sources all category scripts
 
 source "$ACFS_GENERATED_SCRIPT_DIR/install_base.sh"
 source "$ACFS_GENERATED_SCRIPT_DIR/install_users.sh"

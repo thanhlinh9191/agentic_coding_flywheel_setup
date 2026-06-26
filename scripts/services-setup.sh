@@ -1376,7 +1376,7 @@ It also supports optional protection packs (database, Kubernetes, cloud)."
         else
             if [[ "$SERVICES_SETUP_NONINTERACTIVE" == "true" ]]; then
                 gum_detail "Registering DCG hook (noninteractive)"
-                run_as_user "$dcg_bin" install --yes || gum_warn "DCG hook registration failed"
+                run_as_user "$dcg_bin" install || gum_warn "DCG hook registration failed"
             else
                 if gum_confirm "Register DCG hook for Claude Code?"; then
                     run_as_user "$dcg_bin" install || gum_warn "DCG hook registration failed"
@@ -1395,7 +1395,7 @@ It also supports optional protection packs (database, Kubernetes, cloud)."
         gum_warn "DCG doctor reported issues"
         if [[ "$SERVICES_SETUP_NONINTERACTIVE" == "true" ]]; then
             gum_detail "Attempting DCG repair (noninteractive)"
-            run_as_user "$dcg_bin" install --force --yes || gum_warn "DCG repair failed"
+            run_as_user "$dcg_bin" install --force || gum_warn "DCG repair failed"
         else
             if gum_confirm "Attempt DCG repair by re-registering the hook?"; then
                 run_as_user "$dcg_bin" install --force || gum_warn "DCG repair failed"

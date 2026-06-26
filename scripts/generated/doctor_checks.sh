@@ -260,9 +260,9 @@ if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
     # installers (uv/rust/bun) write into it. uv installs via an atomic
     # mktemp+rename inside ~/.local/bin, so a root-owned ~/.local/bin makes its
     # mktemp fail with "Permission denied (os error 13)" once the installer is
-    # re-exec'd as the (non-root) target user. The chown is NON-recursive on
-    # purpose — only the two directories themselves, never their contents (never
-    # chown -R ~/.local, which would clobber ownership of unrelated state).
+    # re-exec'd as the (non-root) target user. The ownership repair is
+    # deliberately non-recursive: only the two directories themselves are
+    # touched, never their contents.
     if [[ $EUID -eq 0 ]] && [[ -n "${TARGET_USER:-}" ]] && [[ "${TARGET_USER}" != "root" ]]; then
         _acfs_repair_mkdir="$(_acfs_system_binary_path mkdir 2>/dev/null || true)"
         _acfs_repair_chown="$(_acfs_system_binary_path chown 2>/dev/null || true)"
@@ -397,7 +397,7 @@ declare -a MANIFEST_CHECKS=(
     "cloud.vercel	Vercel CLI	vercel --version	optional	target_user"
     "stack.ntm	Named tmux manager (agent cockpit)	ntm --help	required	target_user"
     "stack.mcp_agent_mail.1	Like gmail for coding agents; MCP HTTP server + token; installs beads tools	command -v am	required	target_user"
-    "stack.mcp_agent_mail.2	Like gmail for coding agents; MCP HTTP server + token; installs beads tools	agent_mail_service_curl() {\\n  local curl_bin=\"\"\\n  local candidate=\"\"\\n\\n  for candidate in /usr/bin/curl /bin/curl /usr/local/bin/curl /usr/local/sbin/curl /usr/sbin/curl /sbin/curl; do\\n    [[ -x \"\$candidate\" ]] || continue\\n    curl_bin=\"\$candidate\"\\n    break\\n  done\\n\\n  [[ -n \"\$curl_bin\" ]] || return 127\\n  \"\$curl_bin\" \"\$@\"\\n}\\n\\nruntime_dir=\"/run/user/\$(id -u)\"\\nif [[ -d \"\$runtime_dir\" ]]; then\\n  export XDG_RUNTIME_DIR=\"\$runtime_dir\"\\n  export DBUS_SESSION_BUS_ADDRESS=\"unix:path=\$runtime_dir/bus\"\\nfi\\nif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then\\n  systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1 || exit 1\\nfi\\nagent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null	required	target_user"
+    "stack.mcp_agent_mail.2	Like gmail for coding agents; MCP HTTP server + token; installs beads tools	agent_mail_service_curl() {\\n  local curl_bin=\"\"\\n  local candidate=\"\"\\n\\n  for candidate in /usr/bin/curl /bin/curl /usr/local/bin/curl /usr/local/sbin/curl /usr/sbin/curl /sbin/curl; do\\n    [[ -x \"\$candidate\" ]] || continue\\n    curl_bin=\"\$candidate\"\\n    break\\n  done\\n\\n  [[ -n \"\$curl_bin\" ]] || return 127\\n  \"\$curl_bin\" \"\$@\"\\n}\\n\\nagent_mail_readiness_ready() {\\n  local readiness_body=\"\"\\n  local readiness_url=\"\"\\n\\n  for readiness_url in \\\\\\n    http://127.0.0.1:8765/health/readiness \\\\\\n    http://127.0.0.1:8765/health\\n  do\\n    readiness_body=\"\$(agent_mail_service_curl -fsS --max-time 10 \"\$readiness_url\" 2>/dev/null)\" || continue\\n    if printf '%s\\\\n' \"\$readiness_body\" | grep -Eq '\"status\"[[:space:]]*:[[:space:]]*\"ready\"([[:space:]]*[,}])'; then\\n      return 0\\n    fi\\n  done\\n\\n  return 1\\n}\\n\\nruntime_dir=\"/run/user/\$(id -u)\"\\nif [[ -d \"\$runtime_dir\" ]]; then\\n  export XDG_RUNTIME_DIR=\"\$runtime_dir\"\\n  export DBUS_SESSION_BUS_ADDRESS=\"unix:path=\$runtime_dir/bus\"\\nfi\\nif command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then\\n  systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1 || exit 1\\nfi\\nagent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null\\nagent_mail_readiness_ready	required	target_user"
     "stack.meta_skill.1	Local-first knowledge management with hybrid semantic search (ms)	ms --version	required	target_user"
     "stack.meta_skill.2	Local-first knowledge management with hybrid semantic search (ms)	ms doctor	optional	target_user"
     "stack.automated_plan_reviser.1	Automated iterative spec refinement with extended AI reasoning (apr)	apr --help	optional	target_user"

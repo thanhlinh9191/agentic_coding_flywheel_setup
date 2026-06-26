@@ -1504,7 +1504,7 @@ modules:
     verified_installer:
       tool: mcp_agent_mail
       runner: bash
-      env: ["AM_INSTALL_SKIP_MCP_SETUP=1"]
+      env: ["AM_INSTALL_SKIP_MCP_SETUP=1", "AM_INSTALL_SKIP_REMOTE_HTTP_READINESS=1"]
       args: ["--dest", "$TARGET_HOME/mcp_agent_mail", "--yes"]
     install:
       - |
@@ -1592,7 +1592,6 @@ modules:
           Environment=$storage_root_env
           Environment=$database_url_env
           Environment=$http_allow_env
-          ExecStartPre=${am_bin_exec} migrate
           ExecStart=${am_bin_exec} serve-http --no-tui --host 127.0.0.1 --port 8765 --path ${am_mcp_path_exec}
           Restart=always
           RestartSec=5
@@ -1643,6 +1642,23 @@ modules:
             "$curl_bin" "$@"
           }
 
+          agent_mail_readiness_ready() {
+            local readiness_body=""
+            local readiness_url=""
+
+            for readiness_url in \
+              http://127.0.0.1:8765/health/readiness \
+              http://127.0.0.1:8765/health
+            do
+              readiness_body="$(agent_mail_service_curl -fsS --max-time 5 "$readiness_url" 2>/dev/null)" || continue
+              if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                return 0
+              fi
+            done
+
+            return 1
+          }
+
           stop_agent_mail_fallback() {
             if [[ -f "$fallback_pid_file" ]]; then
               existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
@@ -1664,7 +1680,8 @@ modules:
           }
 
           launch_agent_mail_fallback() {
-            if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; then
+            if agent_mail_service_curl -fsS --max-time 5 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+               agent_mail_readiness_ready; then
               return 0
             fi
 
@@ -1672,17 +1689,18 @@ modules:
               existing_pid="$(cat "$fallback_pid_file" 2>/dev/null || true)"
               if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null && \
                  ps -p "$existing_pid" -o args= 2>/dev/null | grep -Fq "$am_bin serve-http"; then
-                return 0
+                stop_agent_mail_fallback
+              else
+                rm -f "$fallback_pid_file"
               fi
-              rm -f "$fallback_pid_file"
             fi
 
             nohup env \
               RUST_LOG=info \
               STORAGE_ROOT="$storage_root" \
               DATABASE_URL="$db_url" \
-              HTTP_PATH="$am_mcp_path" \
-              "$am_bin" serve-http --host 127.0.0.1 --port 8765 --path "$am_mcp_path" --no-auth --no-tui \
+              HTTP_ALLOW_LOCALHOST_UNAUTHENTICATED=true \
+              "$am_bin" serve-http --no-tui --host 127.0.0.1 --port 8765 --path "$am_mcp_path" \
               >>"$fallback_log_file" 2>&1 < /dev/null &
             echo $! > "$fallback_pid_file"
           }
@@ -1723,11 +1741,29 @@ modules:
             "$curl_bin" "$@"
           }
 
+          agent_mail_readiness_ready() {
+            local readiness_body=""
+            local readiness_url=""
+
+            for readiness_url in \
+              http://127.0.0.1:8765/health/readiness \
+              http://127.0.0.1:8765/health
+            do
+              readiness_body="$(agent_mail_service_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+              if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                return 0
+              fi
+            done
+
+            return 1
+          }
+
           waited=0
-          max_wait=90
-          until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1; do
+          max_wait=240
+          until agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null 2>&1 && \
+                agent_mail_readiness_ready; do
             if [[ "$waited" -ge "$max_wait" ]]; then
-              echo "Agent Mail service did not become healthy on 127.0.0.1:8765 after ${max_wait}s" >&2
+              echo "Agent Mail service did not become ready on 127.0.0.1:8765 after ${max_wait}s" >&2
               exit 1
             fi
             sleep 2
@@ -1750,6 +1786,23 @@ modules:
             "$curl_bin" "$@"
           }
 
+          agent_mail_readiness_ready() {
+            local readiness_body=""
+            local readiness_url=""
+
+            for readiness_url in \
+              http://127.0.0.1:8765/health/readiness \
+              http://127.0.0.1:8765/health
+            do
+              readiness_body="$(agent_mail_service_curl -fsS --max-time 10 "$readiness_url" 2>/dev/null)" || continue
+              if printf '%s\n' "$readiness_body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*[,}])'; then
+                return 0
+              fi
+            done
+
+            return 1
+          }
+
           runtime_dir="/run/user/$(id -u)"
           if [[ -d "$runtime_dir" ]]; then
             export XDG_RUNTIME_DIR="$runtime_dir"
@@ -1759,11 +1812,12 @@ modules:
             systemctl --user is-active --quiet agent-mail.service >/dev/null 2>&1 || exit 1
           fi
           agent_mail_service_curl -fsS --max-time 10 http://127.0.0.1:8765/health/liveness >/dev/null
+          agent_mail_readiness_ready
     notes:
-      - "Installs with --no-start, then writes a managed no-auth user service on port 8765"
+      - "Runs the upstream installer with ACFS-owned MCP setup/readiness skips, then writes a managed local service on port 8765"
       - "Managed service pins storage, database, and MCP path under ~/.mcp_agent_mail_git_mailbox_repo"
       - "If a user systemd manager is available, verification requires agent-mail.service to be active"
-      - "Server health is verified at http://127.0.0.1:8765/health/liveness after install"
+      - "Server liveness and readiness are verified after install"
 
   - id: stack.meta_skill
     description: Local-first knowledge management with hybrid semantic search (ms)
@@ -2299,7 +2353,11 @@ modules:
       tool: dcg
       runner: bash
       args: ["--easy-mode"]
-    install: []
+    install:
+      - |
+          if command -v claude >/dev/null 2>&1; then
+            dcg install --force
+          fi
     verify:
       - dcg --version
       - |
