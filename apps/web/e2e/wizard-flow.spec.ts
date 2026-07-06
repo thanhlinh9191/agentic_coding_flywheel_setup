@@ -214,6 +214,14 @@ test.describe("Wizard Flow", () => {
     await expect(page.locator("code").filter({
       hasText: "Set-Content $HOME\\.ssh\\acfs_ed25519.pub",
     }).first()).toBeVisible();
+    // PowerShell 5.1 drops a literal empty "" argument, so the Windows command
+    // must pick the empty-passphrase argument per PowerShell version instead.
+    await expect(page.locator("code").filter({
+      hasText: "-N $NoPass",
+    }).first()).toBeVisible();
+    await expect(page.locator("code").filter({
+      hasText: "PSNativeCommandArgumentPassing",
+    }).first()).toBeVisible();
   });
 
   test("should complete step 4: Rent VPS", async ({ page }) => {

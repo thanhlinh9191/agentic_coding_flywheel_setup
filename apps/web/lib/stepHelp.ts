@@ -61,6 +61,11 @@ export const STEP_HELP: Partial<Record<number, StepHelp>> = {
           "On Windows, make sure you're using PowerShell or Windows Terminal (not Command Prompt). On Mac/Linux, open a new terminal window.",
       },
       {
+        symptom: "option requires an argument -- N (Windows)",
+        solution:
+          "Older PowerShell versions drop the empty \"\" after -N before ssh-keygen sees it. Re-copy the command from this page — it now picks the right empty-passphrase argument for your PowerShell version automatically.",
+      },
+      {
         symptom: "The key file already exists",
         solution:
           "If you already have an SSH key at ~/.ssh/acfs_ed25519, you can skip this step and reuse it. Just make sure you remember the passphrase (if any).",
