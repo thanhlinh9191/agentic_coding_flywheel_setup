@@ -31,15 +31,17 @@ const GENERATE_SSH_KEY_COMMAND = [
 ].join(" ");
 
 // The empty-passphrase argument must adapt to the PowerShell version: Windows
-// PowerShell 5.1 (and pwsh <7.3) drops empty-string args to native commands, so
-// ssh-keygen needs the literal '""' to receive an empty -N argument there. On
-// pwsh 7.3+ (Standard/Windows argument passing) '""' would become a literal
-// two-character passphrase, so an actual empty string must be passed instead.
+// PowerShell 5.1 (and pwsh with Legacy argument passing) drops empty-string
+// args to native commands, so ssh-keygen needs the literal '""' to receive an
+// empty -N argument there. Under pwsh's Standard/Windows argument passing,
+// '""' would become a literal two-character passphrase, so an actual empty
+// string must be passed instead. The version guard matters: PS 5.1 ignores
+// $PSNativeCommandArgumentPassing even if a profile script defines it.
 const GENERATE_SSH_KEY_WINDOWS_COMMAND = [
   "if (Test-Path $HOME\\.ssh\\acfs_ed25519) {",
   "ssh-keygen -y -f $HOME\\.ssh\\acfs_ed25519 | Set-Content $HOME\\.ssh\\acfs_ed25519.pub",
   "} else {",
-  "$NoPass = if ((Test-Path variable:PSNativeCommandArgumentPassing) -and $PSNativeCommandArgumentPassing -ne 'Legacy') { '' } else { '\"\"' };",
+  "$NoPass = if ($PSVersionTable.PSVersion.Major -ge 7 -and (Test-Path variable:PSNativeCommandArgumentPassing) -and $PSNativeCommandArgumentPassing -ne 'Legacy') { '' } else { '\"\"' };",
   'ssh-keygen -t ed25519 -C "acfs" -f $HOME\\.ssh\\acfs_ed25519 -N $NoPass',
   "}",
 ].join(" ");

@@ -63,7 +63,7 @@ export const STEP_HELP: Partial<Record<number, StepHelp>> = {
       {
         symptom: "option requires an argument -- N (Windows)",
         solution:
-          "Older PowerShell versions drop the empty \"\" after -N before ssh-keygen sees it. Re-copy the command from this page — it now picks the right empty-passphrase argument for your PowerShell version automatically.",
+          "Older PowerShell versions drop the empty \"\" after -N before ssh-keygen sees it (and ssh-keygen may then sit waiting for a passphrase — press Ctrl+C first). Copy the exact command from this page instead of typing it; it selects the right empty-passphrase argument for your PowerShell version automatically.",
       },
       {
         symptom: "The key file already exists",
