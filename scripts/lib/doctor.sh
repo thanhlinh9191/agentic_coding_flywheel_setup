@@ -1218,6 +1218,12 @@ json_escape() {
     s=${s//$'\n'/\\n}
     s=${s//$'\r'/\\r}
     s=${s//$'\t'/\\t}
+    # Strip any remaining raw control bytes (e.g. ANSI escapes that a tool
+    # emits in its --version output). JSON forbids literal U+0000-U+001F inside
+    # strings, so leaving them in would make jq/consumers reject the output.
+    # The escaped \n, \r and \t above are now backslash sequences, not control
+    # bytes, so the ranges below deliberately exclude 0x09/0x0A/0x0D.
+    s=$(printf '%s' "$s" | LC_ALL=C tr -d '\000-\010\013\014\016-\037') || true
     printf '%s' "$s"
 }
 
@@ -1236,7 +1242,9 @@ run_with_timeout() {
 
     local result
     local status
-    result=$(timeout "$timeout_secs" "$@" 2>&1)
+    # -k 5: if the probe ignores/traps SIGTERM at the deadline, force-kill it
+    # 5s later so `acfs doctor --deep` can't hang past its timeout budget.
+    result=$(timeout -k 5 "$timeout_secs" "$@" 2>&1)
     status=$?
 
     if ((status == 124)); then

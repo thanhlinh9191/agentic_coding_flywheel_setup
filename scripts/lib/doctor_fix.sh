@@ -1320,8 +1320,12 @@ fix_symlink_create() {
         return 1
     fi
 
-    # Guard: Symlink must not exist
-    if [[ -e "$symlink" ]]; then
+    # Guard: nothing must exist at the target path. Test -L as well as -e so a
+    # pre-existing *broken* user symlink (which -e reports as absent) is left
+    # untouched: otherwise `ln -s` below fails with "File exists" and its
+    # failure rollback would `rm -f` a symlink this fixer never created,
+    # violating the "never deletes user files" guarantee with no backup.
+    if [[ -e "$symlink" || -L "$symlink" ]]; then
         doctor_fix_log INFO "Symlink already exists: $symlink"
         return 0
     fi

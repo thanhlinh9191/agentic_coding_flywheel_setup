@@ -3447,6 +3447,15 @@ update_checksums_file_has_required_metadata() {
 # a full ACFS re-install.
 refresh_checksums() {
     local quiet="${1:-false}"
+
+    # Read-only contract: --dry-run must not perform network I/O or overwrite
+    # the deployed checksums.yaml on disk. The existing cached file is used for
+    # any verification reporting during the dry run.
+    if update_is_read_only_mode; then
+        [[ "$quiet" != "true" ]] && log_item "skip" "checksums refresh" "dry-run: would sync checksums.yaml from GitHub"
+        return 0
+    fi
+
     local checksums_local=""
     local checksums_ref="${ACFS_CHECKSUMS_REF:-main}"
     local date_bin=""
@@ -4161,7 +4170,6 @@ update_refresh_installed_security() {
     # when running from the installed copy at ~/.acfs).
     local repo_security=""
     local -a repo_candidates=(
-        "/data/projects/agentic_coding_flywheel_setup/scripts/lib/security.sh"
         "${ACFS_REPO_ROOT}/scripts/lib/security.sh"
     )
     for candidate in "${repo_candidates[@]}"; do
@@ -6125,6 +6133,11 @@ update_p10k() {
         return 0
     fi
 
+    if update_is_read_only_mode; then
+        log_item "skip" "Powerlevel10k" "dry-run: git pull --ff-only"
+        return 0
+    fi
+
     capture_version_before "p10k"
 
     # Use --ff-only to avoid merge conflicts
@@ -6159,6 +6172,11 @@ update_p10k() {
 update_zsh_plugins() {
     local zsh_custom="${ZSH_CUSTOM:-${ZSH:-$HOME/.oh-my-zsh}/custom}"
     local plugins_dir="$zsh_custom/plugins"
+
+    if update_is_read_only_mode; then
+        log_item "skip" "zsh plugins" "dry-run: git pull --ff-only"
+        return 0
+    fi
 
     # Known plugins to update
     local -a plugins=(
