@@ -17,7 +17,7 @@ import {
   useCompletedSteps,
 } from "@/lib/wizardSteps";
 import { useStepValidation } from "@/lib/hooks/useStepValidation";
-import { getUserOS } from "@/lib/userPreferences";
+import { getUserOS, getVPSIP } from "@/lib/userPreferences";
 import { withCurrentSearch } from "@/lib/utils";
 
 export default function WizardLayout({
@@ -50,13 +50,21 @@ export default function WizardLayout({
   useEffect(() => {
     if (hideSharedStepChrome) return;
 
-    let persistedSteps = getCompletedSteps();
-    // A known OS (stored or carried in the ?os= param) IS step 1's outcome:
-    // a shared deep link like /wizard/install-terminal?os=windows must not
-    // bounce to os-selection just because this browser has no stored state.
-    if (!persistedSteps.includes(1) && getUserOS() !== null) {
-      persistedSteps = [...persistedSteps, 1];
+    // Deep links can carry wizard state in query params. Treat that state as
+    // completing the step that produces it, so a shared link doesn't bounce to
+    // step 1 on a fresh browser with no stored progress: a known OS implies
+    // step 1 (os-selection), and a known valid VPS IP implies steps 1-5 (the
+    // IP is entered on create-vps, step 5).
+    const impliedComplete = new Set(getCompletedSteps());
+    if (getUserOS() !== null) {
+      impliedComplete.add(1);
     }
+    if (getVPSIP() !== null) {
+      for (let step = 1; step <= 5; step += 1) {
+        impliedComplete.add(step);
+      }
+    }
+    const persistedSteps = [...impliedComplete];
     if (canAccessWizardStep(persistedSteps, currentStep)) {
       return;
     }
