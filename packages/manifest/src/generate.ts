@@ -1129,10 +1129,17 @@ function generateVerifiedInstallerSnippet(module: Module): string[] {
   // This prevents blocking when the installer starts a long-running server
   if (runInTmux) {
     const tmuxSession = 'acfs-services';
+    // NOTE: this snippet executes as the condition list of `if ! { ... }`
+    // (wrapCommandBlock), where `set -e` is suppressed and only the LAST
+    // command's exit status matters. Bare `false` statements are no-ops
+    // there, so every failure path must set install_success=false and the
+    // block must end with an explicit fail-closed gate, exactly like the
+    // standard and fsfs verified-installer paths.
     const lines: string[] = [
       '# Run installer in detached tmux session (run_in_tmux: true)',
       '# This prevents blocking when the installer starts a long-running service',
       `local tmux_session="${tmuxSession}"`,
+      'local install_success=false',
       '',
       '# Resolve verified installer URL + checksum (fail closed)',
       `local tool="${tool}"`,
@@ -1154,46 +1161,48 @@ function generateVerifiedInstallerSnippet(module: Module): string[] {
       `    log_error "${escapeBash(module.id)}: acfs_security_init failed - check security.sh and checksums.yaml"`,
       'fi',
       '',
+      'local tmp_install=""',
       'if [[ -z "$url" ]]; then',
       `    log_error "${escapeBash(module.id)}: KNOWN_INSTALLERS[$tool] not found"`,
-      '    false',
-      'fi',
-      'if [[ -z "$expected_sha256" ]]; then',
+      'elif [[ -z "$expected_sha256" ]]; then',
       `    log_error "${escapeBash(module.id)}: checksum for '$tool' not found"`,
-      '    false',
-      'fi',
+      'else',
+      '    # Download verified installer to a temp file (so tmux can exec it without pipes)',
+      '    tmp_install="$(mktemp "${TMPDIR:-/tmp}/acfs-install-${tool}.XXXXXX" 2>/dev/null)" || tmp_install=""',
+      '    if [[ -z "$tmp_install" ]]; then',
+      `        log_error "Failed to create temp installer for ${module.id}"`,
+      '    elif ! verify_checksum "$url" "$expected_sha256" "$tool" > "$tmp_install"; then',
+      '        rm -f "$tmp_install" 2>/dev/null || true',
+      `        log_error "${module.id}: installer verification failed"`,
+      '    else',
+      '        chmod 755 "$tmp_install" 2>/dev/null || true',
       '',
-      '# Download verified installer to a temp file (so tmux can exec it without pipes)',
-      'local tmp_install',
-      'tmp_install="$(mktemp "${TMPDIR:-/tmp}/acfs-install-${tool}.XXXXXX" 2>/dev/null)" || tmp_install=""',
-      'if [[ -z "$tmp_install" ]]; then',
-      `    log_error "Failed to create temp installer for ${module.id}"`,
-      '    false',
-      'fi',
+      '        # Kill existing session if any (clean slate)',
+      '        run_as_target tmux kill-session -t "$tmux_session" 2>/dev/null || true',
       '',
-      'if ! verify_checksum "$url" "$expected_sha256" "$tool" > "$tmp_install"; then',
-      '    rm -f "$tmp_install" 2>/dev/null || true',
-      `    log_error "${module.id}: installer verification failed"`,
-      '    false',
-      'fi',
-      'chmod 755 "$tmp_install" 2>/dev/null || true',
-      '',
-      '# Kill existing session if any (clean slate)',
-      'run_as_target tmux kill-session -t "$tmux_session" 2>/dev/null || true',
-      '',
-      '# Create new detached tmux session and run the installer',
-      'if run_as_target tmux new-session -d -s "$tmux_session" ' +
+      '        # Create new detached tmux session and run the installer',
+      '        if run_as_target tmux new-session -d -s "$tmux_session" ' +
         (envStr ? `env ${envStr} ` : '') +
         `${shellQuote(vi.runner)} "$tmp_install"` +
         (argsStr ? ` ${argsStr}` : '') +
         '; then',
-      `        log_success "${module.id} installing in tmux session '$tmux_session'"`,
-      '        log_info "Attach with: tmux attach -t $tmux_session"',
-      '        # Give it a moment to start',
-      '        sleep 3',
-      '    else',
-      `        log_warn "${module.id} tmux installation may have failed"`,
+      `            log_success "${module.id} installing in tmux session '$tmux_session'"`,
+      '            log_info "Attach with: tmux attach -t $tmux_session"',
+      '            # Give it a moment to start',
+      '            sleep 3',
+      '            install_success=true',
+      '        else',
+      `            log_error "${module.id}: failed to start tmux install session"`,
+      '        fi',
       '    fi',
+      'fi',
+      '',
+      'if [[ "$install_success" = "true" ]]; then',
+      '    true',
+      'else',
+      `    log_error "${escapeBash(module.id)}: verified tmux installer failed (fail closed; no unverified fallback)"`,
+      '    false',
+      'fi',
     ];
     return lines;
   }
