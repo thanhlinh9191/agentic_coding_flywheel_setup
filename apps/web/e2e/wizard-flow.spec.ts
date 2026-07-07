@@ -614,11 +614,10 @@ test.describe("Navigation", () => {
 
 test.describe("IP Address Validation", () => {
   test("should reject invalid IP addresses", async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
-      localStorage.setItem("agent-flywheel-user-os", "mac");
-    });
-
+    // Seed steps 1-4 so create-vps (step 5) is legitimately reachable;
+    // otherwise the layout guard redirects away and the IP input detaches
+    // mid-interaction, making this test race the post-mount redirect.
+    await setupWizardState(page, { os: "mac", completedSteps: [1, 2, 3, 4] });
     await page.goto("/wizard/create-vps");
     await expect(page.locator("h1").first()).toBeVisible();
 
@@ -634,11 +633,10 @@ test.describe("IP Address Validation", () => {
   });
 
   test("should accept valid IP addresses", async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
-      localStorage.setItem("agent-flywheel-user-os", "mac");
-    });
-
+    // Seed steps 1-4 so create-vps (step 5) is legitimately reachable;
+    // otherwise the layout guard redirects away and the IP input detaches
+    // mid-interaction, making this test race the post-mount redirect.
+    await setupWizardState(page, { os: "mac", completedSteps: [1, 2, 3, 4] });
     await page.goto("/wizard/create-vps");
     await expect(page.locator("h1").first()).toBeVisible();
 
@@ -654,11 +652,10 @@ test.describe("IP Address Validation", () => {
   });
 
   test("should reject out-of-range IP octets", async ({ page }) => {
-    await page.goto("/");
-    await page.evaluate(() => {
-      localStorage.setItem("agent-flywheel-user-os", "mac");
-    });
-
+    // Seed steps 1-4 so create-vps (step 5) is legitimately reachable;
+    // otherwise the layout guard redirects away and the IP input detaches
+    // mid-interaction, making this test race the post-mount redirect.
+    await setupWizardState(page, { os: "mac", completedSteps: [1, 2, 3, 4] });
     await page.goto("/wizard/create-vps");
     await expect(page.locator("h1").first()).toBeVisible();
 
