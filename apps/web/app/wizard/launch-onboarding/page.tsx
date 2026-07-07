@@ -106,7 +106,10 @@ export default function LaunchOnboardingStep() {
   const [vpsIP, , vpsIPLoaded] = useVPSIP();
   const [sshUsername, , sshUsernameLoaded] = useSSHUsername();
   const ready = vpsIPLoaded && sshUsernameLoaded;
-  const displayIP = vpsIP ?? "";
+  // The page is reachable before an IP is stored (the CommandBuilderPanel
+  // below lets the user enter it inline). Until then, show a readable
+  // placeholder in the reconnect snippets instead of a dangling "ubuntu@".
+  const displayIP = vpsIP && vpsIP.trim() ? vpsIP : "YOUR_VPS_IP";
   const effectiveUsername = sshUsername.trim() || "ubuntu";
   const userTarget = formatSshTarget(effectiveUsername, displayIP);
   const homeDir = effectiveUsername === "root" ? "/root" : `/home/${effectiveUsername}`;
@@ -129,11 +132,9 @@ export default function LaunchOnboardingStep() {
       return;
     }
 
-    if (vpsIP === null) {
-      router.replace(withCurrentSearch("/wizard/create-vps"));
-      return;
-    }
-
+    // A missing IP no longer bounces the user back to create-vps: the
+    // CommandBuilderPanel on this page lets them enter it inline, and the
+    // reconnect snippets fall back to a placeholder until they do.
     markComplete({ wizard_completed: true });
     markStepComplete(13);
     const allSteps = Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1);
@@ -141,9 +142,9 @@ export default function LaunchOnboardingStep() {
     // Use setTimeout to avoid the ESLint set-state-in-effect rule, since
     // this unlock is logically part of the navigation guard check above.
     setTimeout(() => setIsUnlocked(true), 0);
-  }, [markComplete, ready, router, vpsIP]);
+  }, [markComplete, ready, router]);
 
-  if (!isUnlocked || !ready || vpsIP === null) {
+  if (!isUnlocked || !ready) {
     return (
       <div className="flex items-center justify-center py-12">
         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
