@@ -556,9 +556,15 @@ set_default_shell() {
     fi
 
     passwd_entry="$(user_getent_passwd_entry "$target" 2>/dev/null || true)"
+    # Track the match with an explicit flag: inferring "not found" from the
+    # loop variable being empty breaks when /etc/passwd lacks a trailing
+    # newline (the final read leaves the last line in the variable), and the
+    # `|| [[ -n ... ]]` guard still processes that unterminated last line.
+    local user_in_local_passwd=false
     if [[ -r /etc/passwd ]]; then
-        while IFS= read -r local_entry; do
+        while IFS= read -r local_entry || [[ -n "$local_entry" ]]; do
             [[ "${local_entry%%:*}" == "$target" ]] || continue
+            user_in_local_passwd=true
             break
         done < /etc/passwd
     fi
@@ -567,7 +573,7 @@ set_default_shell() {
         target_home="$(user_passwd_home_from_entry "$passwd_entry" 2>/dev/null || true)"
     fi
 
-    if [[ -n "$passwd_entry" ]] && [[ -z "$local_entry" ]]; then
+    if [[ -n "$passwd_entry" ]] && [[ "$user_in_local_passwd" == "false" ]]; then
         log_warn "Shell for $target is managed outside /etc/passwd; installing a bash-to-zsh handoff instead of using chsh"
         if [[ -n "$target_home" ]] && ! user_external_shell_handoff_configured "$target_home"; then
             user_append_external_shell_handoff "$target_home" || return 1

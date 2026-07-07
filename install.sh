@@ -7373,6 +7373,13 @@ finalize() {
     try_step "Linking onboard command" acfs_link_primary_bin_command "$ACFS_HOME/onboard/onboard.sh" "onboard" || return 1
     try_step "Linking global onboard command" acfs_link_global_bin_command "$ACFS_HOME/onboard/onboard.sh" "onboard" || return 1
 
+    # Install shell completions (acfs.zshrc adds ~/.acfs/completions to fpath
+    # only when _acfs exists, so without this step `acfs <TAB>` never works)
+    log_detail "Installing shell completions"
+    try_step "Installing zsh completion (_acfs)" install_asset "scripts/completions/_acfs" "$ACFS_HOME/completions/_acfs" || return 1
+    try_step "Installing bash completion (acfs.bash)" install_asset "scripts/completions/acfs.bash" "$ACFS_HOME/completions/acfs.bash" || return 1
+    try_step "Setting completions ownership" acfs_chown_tree "$TARGET_USER:$TARGET_USER" "$ACFS_HOME/completions" || return 1
+
     # Install acfs scripts (for acfs CLI subcommands)
     log_detail "Installing acfs scripts"
     try_step "Creating ACFS scripts directory" $SUDO mkdir -p "$ACFS_HOME/scripts/lib" || return 1

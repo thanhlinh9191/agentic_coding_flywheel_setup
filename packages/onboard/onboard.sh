@@ -1287,7 +1287,9 @@ progress_file_is_valid() {
     compact="$(compact_progress_json || true)"
     [[ -n "$compact" ]] || return 1
     [[ "$compact" == *'"completed":['* ]] || return 1
-    [[ "$compact" =~ \"current\":[0-9]+ ]] || return 1
+    # Accept null like the jq branch does, or a valid file written while jq
+    # was installed gets flagged malformed and needlessly backed up/reset.
+    [[ "$compact" =~ \"current\":(null|[0-9]+) ]] || return 1
 
     return 0
 }
@@ -2223,11 +2225,16 @@ print_header() {
             time_text="All lessons complete!"
         fi
 
+        # Clamp padding at zero: a time_text longer than the box (e.g. the
+        # "No lessons found in <path>" message) would otherwise produce a
+        # negative printf width, which left-justifies and blows out the border.
+        local time_pad=$((27 - ${#time_text}))
+        (( time_pad < 0 )) && time_pad=0
         echo ""
         echo -e "${BOLD}${MAGENTA}╭─────────────────────────────────────────────────────╮${NC}"
         echo -e "${BOLD}${MAGENTA}│${NC}  ${BOLD}📚 ACFS Onboarding${NC}                                   ${BOLD}${MAGENTA}│${NC}"
         echo -e "${BOLD}${MAGENTA}│${NC}  ${CYAN}${bar}${NC} ${GREEN}${completed}/${total}${NC} (${percent}%)            ${BOLD}${MAGENTA}│${NC}"
-        echo -e "${BOLD}${MAGENTA}│${NC}  ${DIM}${time_text}${NC}$(printf '%*s' $((27 - ${#time_text})) '')${BOLD}${MAGENTA}│${NC}"
+        echo -e "${BOLD}${MAGENTA}│${NC}  ${DIM}${time_text}${NC}$(printf '%*s' "$time_pad" '')${BOLD}${MAGENTA}│${NC}"
         echo -e "${BOLD}${MAGENTA}╰─────────────────────────────────────────────────────╯${NC}"
         echo ""
     fi

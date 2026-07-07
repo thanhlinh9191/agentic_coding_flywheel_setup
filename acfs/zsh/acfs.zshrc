@@ -23,8 +23,7 @@ if [[ -n "$TERM" ]] && ! infocmp "$TERM" &>/dev/null; then
 fi
 
 # --- Paths (early) ---
-# User ~/bin takes highest precedence (for custom shims)
-[[ -d "$HOME/bin" ]] && export PATH="$HOME/bin:$PATH"
+# Each line below PREPENDS, so the LAST prepend ends up first in PATH.
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # Go (support both apt-style and /usr/local/go)
@@ -38,6 +37,10 @@ export BUN_INSTALL="$HOME/.bun"
 
 # Ensure user-local binaries take precedence (e.g., native Claude install).
 export PATH="$HOME/.local/bin:$PATH"
+
+# User ~/bin takes highest precedence (for custom shims), so it must be the
+# final prepend — anything earlier would be outranked by the lines above.
+[[ -d "$HOME/bin" ]] && export PATH="$HOME/bin:$PATH"
 if command -v zsh &>/dev/null; then
   export SHELL="$(command -v zsh)"
 fi
@@ -76,6 +79,14 @@ plugins=(
   zsh-autosuggestions
   zsh-syntax-highlighting
 )
+
+# --- ACFS Tab Completion (zsh) ---
+# fpath must gain the completions directory BEFORE oh-my-zsh runs compinit,
+# or the #compdef header in _acfs is never registered and `acfs <TAB>`
+# silently does nothing.
+if [[ -f "$HOME/.acfs/completions/_acfs" ]]; then
+  fpath=("$HOME/.acfs/completions" "${fpath[@]}")
+fi
 
 # Load OMZ if installed
 if [[ -f "$ZSH/oh-my-zsh.sh" ]]; then
@@ -161,7 +172,9 @@ alias p='cd /data/projects'
 # --- Ubuntu/Debian convenience ---
 alias update='sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y'
 alias install='sudo apt install'
-alias search='apt search'
+# Named aptsearch (not `search`) so it can't shadow the ripgrep `search`
+# alias defined in the modern-CLI block above.
+alias aptsearch='apt search'
 
 # Update agent CLIs
 alias uca='(curl -fsSL https://claude.ai/install.sh | bash -s -- latest) && ("$HOME/.bun/bin/bun" install -g --trust @openai/codex@latest || "$HOME/.bun/bin/bun" install -g --trust @openai/codex) && "$HOME/.local/bin/agy" update && "$HOME/.local/bin/agy-locked" --acfs-prime-settings'
@@ -514,14 +527,6 @@ acfs() {
       ;;
   esac
 }
-
-# --- ACFS Tab Completion (zsh) ---
-# Load acfs completions if the function is available
-if [[ -f "$HOME/.acfs/completions/_acfs" ]]; then
-  # Add to fpath before compinit, or load directly if compinit already ran
-  fpath=("$HOME/.acfs/completions" "${fpath[@]}")
-  autoload -Uz _acfs 2>/dev/null
-fi
 
 # --- Agent aliases (dangerously enabled by design) ---
 alias cc='NODE_OPTIONS="--max-old-space-size=32768" ~/.local/bin/claude --dangerously-skip-permissions'
