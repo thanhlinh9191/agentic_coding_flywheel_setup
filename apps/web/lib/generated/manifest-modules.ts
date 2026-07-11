@@ -33,7 +33,7 @@ export interface ManifestProvenanceMetadata {
 export const manifestProvenance = {
   acfsVersion: "0.7.0",
   manifestSha256: "1dc8d9788bf9ebe34e1bc3b9029efc8cf0a88ded099e8255416f844cc9b5300f",
-  checksumsYamlSha256: "5180b9d26694dcdfd59e4eeb13c98a9f000e8fd4b95c4cc27abeb777f5463e00",
+  checksumsYamlSha256: "8b2150e5b838543637061ed324c412a049aa784414be280bf4e16bfc632b62d1",
 } as const satisfies ManifestProvenanceMetadata;
 
 export const manifestModules: ManifestModuleMetadata[] = [
