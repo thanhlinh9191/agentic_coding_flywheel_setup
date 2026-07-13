@@ -225,8 +225,37 @@ export UV_LINK_MODE=copy
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 
 # nvm (Node Version Manager)
+#
+# Sourcing nvm.sh plainly runs nvm_auto -> nvm_version -> nvm_resolve_alias on
+# every interactive shell. That walks the versions tree and costs 2-38s per
+# shell (measured: trj 37,968ms, css 2,746ms, ts2 4,523ms), so every new pane
+# and every command in a fresh shell pays it.
+#
+# nvm.sh is also the only thing that puts node on PATH, so it can't just be
+# dropped. Resolve the node bin directly (cheap), then source nvm.sh with
+# --no-use so the `nvm` function still exists without the auto-use cost.
 export NVM_DIR="$HOME/.nvm"
-[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    if [[ -z "${NVM_BIN:-}" || ! -x "${NVM_BIN}/node" ]]; then
+        # A pinned default alias is a concrete version (v26.0.0); symbolic ones
+        # ("node", "lts/*") need nvm to resolve, so fall back to newest installed.
+        _acfs_nvm_default="$(command cat "$NVM_DIR/alias/default" 2>/dev/null)"
+        if [[ "$_acfs_nvm_default" == v* && -x "$NVM_DIR/versions/node/$_acfs_nvm_default/bin/node" ]]; then
+            _acfs_nvm_bin="$NVM_DIR/versions/node/$_acfs_nvm_default/bin"
+        else
+            _acfs_nvm_bin="$(command ls -1d "$NVM_DIR"/versions/node/v*/bin 2>/dev/null | command sort -V | command tail -n 1)"
+        fi
+        if [[ -n "${_acfs_nvm_bin:-}" && -x "$_acfs_nvm_bin/node" ]]; then
+            case ":$PATH:" in
+                *":$_acfs_nvm_bin:"*) ;;
+                *) export PATH="$_acfs_nvm_bin:$PATH" ;;
+            esac
+            export NVM_BIN="$_acfs_nvm_bin"
+        fi
+        unset _acfs_nvm_default _acfs_nvm_bin
+    fi
+    source "$NVM_DIR/nvm.sh" --no-use
+fi
 [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
 
 # Zoxide (better cd)
