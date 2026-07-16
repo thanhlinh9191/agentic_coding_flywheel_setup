@@ -1532,13 +1532,20 @@ update_create_target_readable_temp_file() {
     return 1
 }
 
-# Bounded command execution: a hard timeout + detached stdin so a slow, stuck, or
-# lock-blocked command (e.g. `cargo install` waiting on the shared package-cache lock
-# on a busy build host, an interactive prompt, or a child that leaks an inherited fd)
-# can never hang the whole updater. Callers redirect output as needed. Returns the
-# command's exit code, or 124 on timeout. Override the ceiling with UPDATE_CMD_TIMEOUT.
+# Bounded command execution: detached stdin (so nothing blocks on input) plus a hard
+# timeout for external commands. The main hang this guards against is run_cmd's output
+# capture blocking forever on a child that leaks an inherited fd — that is handled by
+# the temp-file capture below and applies to everything, including shell functions.
+#
+# IMPORTANT: `timeout` (like `setsid`) execs its argument and CANNOT run a shell
+# function or builtin — and acfs wraps most commands in functions
+# (update_run_in_target_context, update_run_verified_installer, ...). Wrapping those in
+# `timeout` makes them fail with exit 127 ("No such file or directory"). So the hard
+# timeout is applied ONLY when the command is a real external executable; functions run
+# directly and rely on the temp-file capture to stay hang-proof. Override the ceiling
+# with UPDATE_CMD_TIMEOUT.
 _run_bounded() {
-    if command -v timeout >/dev/null 2>&1; then
+    if [[ "$(type -t -- "${1:-}" 2>/dev/null)" == "file" ]] && command -v timeout >/dev/null 2>&1; then
         timeout --kill-after=30s "${UPDATE_CMD_TIMEOUT:-1800}" "$@" </dev/null
     else
         "$@" </dev/null
@@ -1610,7 +1617,7 @@ run_cmd() {
             output=$(_run_bounded "$@" 2>&1) || exit_code=$?
         fi
         [[ -n "$output" ]] && log_to_file "Output: $output"
-        [[ "$exit_code" -eq 124 ]] && log_to_file "TIMEOUT after ${UPDATE_CMD_TIMEOUT:-1800}s: $cmd_display"
+        case "$exit_code" in 124|125|137) log_to_file "TIMEOUT/killed (>= ${UPDATE_CMD_TIMEOUT:-1800}s): $cmd_display" ;; esac
     fi
 
     if [[ $exit_code -eq 0 ]]; then
