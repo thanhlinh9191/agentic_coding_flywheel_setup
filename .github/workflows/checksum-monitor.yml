@@ -1,8 +1,6 @@
 name: Auto-Update Upstream Checksums
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"  # Every 15 minutes — minimizes stale-checksum window
   workflow_dispatch:         # Manual trigger for testing
   push:
     branches:
@@ -15,8 +13,6 @@ on:
       - 'scripts/lib/**'
       - 'scripts/generated/**'
       - '.github/workflows/checksum-monitor.yml'
-  repository_dispatch:
-    types: [upstream-changed]  # Triggered by our other repos via webhook
 
 concurrency:
   group: checksum-monitor

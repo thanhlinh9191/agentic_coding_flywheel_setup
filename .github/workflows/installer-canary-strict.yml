@@ -1,8 +1,6 @@
 name: Installer Canary (Strict)
 
 on:
-  schedule:
-    - cron: "15 4 * * *" # 4:15 AM UTC nightly
   workflow_dispatch:
     inputs:
       ubuntu:

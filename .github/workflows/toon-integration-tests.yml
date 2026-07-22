@@ -12,8 +12,6 @@ on:
       - 'scripts/test_*.sh'
       - 'scripts/verify_*.sh'
   workflow_dispatch:
-  schedule:
-    - cron: "0 6 * * 1" # Weekly on Monday 6 AM UTC
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,8 +1,6 @@
 name: Factory Installer E2E (Fresh Host/QEMU)
 
 on:
-  schedule:
-    - cron: "0 8 * * 0" # weekly QEMU/KVM factory canary
   workflow_dispatch:
     inputs:
       backend:
@@ -55,9 +53,6 @@ on:
         description: "Optional runner label override. Leave blank to use ACFS_FACTORY_RUNNER or ubuntu-latest."
         default: ""
         required: false
-  repository_dispatch:
-    types:
-      - acfs-factory-host-ready
   workflow_call:
     inputs:
       backend:
